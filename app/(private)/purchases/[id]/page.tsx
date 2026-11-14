@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { pageUser } from "@/lib/auth";
+import { DeletePhoto } from "@/components/delete-photo";
 import { collection } from "@/lib/data";
 import { won, vintageLabel } from "@/lib/domain";
 import { ReceiptForm, DeleteButton, MediaForm } from "@/components/forms";
@@ -83,6 +84,7 @@ export default async function Receipt({
                               · WebP 변환
                             </small>
                           )}
+                          <DeletePhoto id={a.id} kind="wine" />
                         </div>
                       ))}
                     <Link className="text-link" href={"/wines/" + x.wine_id}>

@@ -2,6 +2,7 @@
 /* Private previews are local object URLs; external thumbnails use no referrer. */
 /* eslint-disable @next/next/no-img-element */
 import { useEffect, useState, useRef } from "react";
+import { DeletePhoto } from "./delete-photo";
 import { Button } from "./ui/button";
 import { commonsPhotos, type WinePhotoHit } from "@/lib/wine-photo-catalog";
 import { prepareUpload } from "@/lib/image-client";
@@ -112,6 +113,7 @@ export function WinePhotoInput({
           style={{ maxHeight: 140, maxWidth: "100%", objectFit: "contain" }}
         />
       )}
+      {!photo && existingId && <DeletePhoto key={existingId} id={existingId} kind="wine" />}
       <p>
         공개 사진은 와인명으로 검색합니다. 검색 결과의 빈티지와 라벨은 실제 병과
         다를 수 있습니다.

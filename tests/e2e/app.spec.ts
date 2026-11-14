@@ -127,6 +127,15 @@ test("authenticated owner can create wine, receipt, note, edit and delete withou
   await expect(page.getByAltText('내 와인 사진')).toBeVisible();
   await expect.poll(()=>page.getByAltText('내 와인 사진').evaluate((el:HTMLImageElement)=>el.naturalWidth)).toBeGreaterThan(0);
 
+  const photo = page.getByAltText("내 와인 사진");
+  const photoUrl = await photo.getAttribute("src");
+  await page.getByRole("button", { name: "사진 삭제", exact: true }).click();
+  await page.getByRole("button", { name: "취소", exact: true }).click();
+  await expect(photo).toBeVisible();
+  await page.getByRole("button", { name: "사진 삭제", exact: true }).click();
+  await page.getByRole("button", { name: "삭제 확인", exact: true }).click();
+  await expect(photo).toHaveCount(0);
+  expect((await page.request.get(photoUrl!)).status()).toBe(404);
   await page.getByLabel("내 평점", { exact: true }).selectOption("4");
   await page.getByLabel("후기", { exact: true }).fill("첫 시음 기록");
   await page
@@ -149,6 +158,9 @@ test("authenticated owner can create wine, receipt, note, edit and delete withou
   await expect(
     page.getByRole("heading", { name: "실결제 24,000원", exact: true }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "사진 삭제", exact: true }).click();
+  await page.getByRole("button", { name: "삭제 확인", exact: true }).click();
+  await expect(page.getByAltText("구매한 와인 병 사진")).toHaveCount(0);
   await page.getByText("구매 기록 수정", { exact: true }).click();
   await page.getByLabel("영수증 할인", { exact: true }).fill("2000");
   await page.getByLabel("실결제액", { exact: true }).fill("23000");

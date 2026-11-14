@@ -195,12 +195,13 @@ async function handle(req: Request, ctx: Context) {
         return NextResponse.json({ id: assetId });
       }
       uuid.parse(id);
-      const { data: asset } = await db
+      const { data: asset, error: lookupError } = await db
         .from("media_assets")
         .select("*")
         .eq("id", id)
         .eq("owner_id", user.id)
         .maybeSingle();
+      dbError(lookupError);
       if (!asset) throw new AppError(404, "찾을 수 없습니다.");
       if (req.method === "GET") {
         const { data, error } = await db.storage

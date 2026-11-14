@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 import { parseReceiptText, type OcrDraft } from "@/lib/receipt-ocr";
 import { WinePhotoInput, type BottlePhoto } from "./wine-photo-input";
+import { DeletePhoto } from "./delete-photo";
 import { ReceiptPhoto } from "./receipt-photo";
 import { CatalogPicker } from "./catalog-picker";
 import { prepareUpload } from "@/lib/image-client";
@@ -1119,11 +1120,7 @@ export function MediaForm({
                 · 크기 조정·WebP 변환
               </small>
             )}
-            <DeleteButton
-              url={`/api/media/${a.id}`}
-              warning="이 이미지를 삭제할까요?"
-              label="사진 삭제"
-            />
+            <DeletePhoto id={a.id} kind={kind} />
           </div>
         ))}
       </div>
