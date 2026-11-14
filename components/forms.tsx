@@ -364,14 +364,16 @@ export function NoteForm({ wineId, note }: { wineId: string; note?: Note }) {
     >
       <div className="form-grid">
         <Field label="내 평점">
-          <select name="my_rating" defaultValue={note?.my_rating ?? ""}>
-            <option value="">평점 없음</option>
-            {Array.from({ length: 10 }, (_, i) => (i + 1) / 2).map((n) => (
-              <option key={n} value={n}>
-                {n.toFixed(1)}
-              </option>
-            ))}
-          </select>
+          <input
+            type="number"
+            inputMode="decimal"
+            name="my_rating"
+            min="1"
+            max="5"
+            step="0.1"
+            placeholder="1.0~5.0"
+            defaultValue={note?.my_rating?.toFixed(1) ?? ""}
+          />
         </Field>
         <Field label="빈티지">
           <input

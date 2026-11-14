@@ -52,7 +52,7 @@ export const noteInput = z
   .object({
     wine_id: z.uuid(),
     vintage_label: vintage,
-    my_rating: z.number().min(0.5).max(5).multipleOf(0.5).nullable(),
+    my_rating: z.number().min(1).max(5).multipleOf(0.1).nullable(),
     review_text: z.string().trim().max(5000).nullable(),
     tasted_on: date.nullable(),
   })
@@ -292,7 +292,13 @@ export type Filters = {
   myMin?: string;
   sort?: string;
 };
+export function ratingMinimum(raw?: string) {
+  const score = Number(raw);
+  return score >= 1 && score <= 5 && Number.isInteger(score * 10) ? score : null;
+}
 export function filteredWines(data: Collection, f: Filters) {
+  const vivinoMin = ratingMinimum(f.vivinoMin);
+  const myMin = ratingMinimum(f.myMin);
   const result = data.wines
     .map((w) => wineSummary(w, data))
     .filter((s) => {
@@ -306,11 +312,11 @@ export function filteredWines(data: Collection, f: Filters) {
         (!f.type?.length || f.type.includes(w.wine_type)) &&
         (!f.country || w.country === f.country) &&
         (!f.region || w.region === f.region) &&
-        (!f.vivinoMin ||
+        (vivinoMin === null ||
           (s.rating?.score != null &&
             s.rating.verification_status !== "needs_review" &&
-            s.rating.score >= Number(f.vivinoMin))) &&
-        (!f.myMin || (s.myRating !== null && s.myRating >= Number(f.myMin)))
+            s.rating.score >= vivinoMin)) &&
+        (myMin === null || (s.myRating !== null && s.myRating >= myMin))
       );
     });
   const compareNullable = (

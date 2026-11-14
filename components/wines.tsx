@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import {
   filteredWines,
+  ratingMinimum,
   wineSummary,
   wineTypes,
   won,
@@ -19,6 +20,8 @@ import {
   type Filters,
   type Wine,
 } from "@/lib/domain";
+import { countryFlag } from "@/lib/country-flag";
+import { RatingFilter } from "./rating-filter";
 import { Button } from "./ui/button";
 export function Bottle({ type = "white" }: { type?: string }) {
   return (
@@ -145,7 +148,7 @@ export function WineList({
           >
             <option value="">모든 국가</option>
             {countries.map((c) => (
-              <option key={c}>{c}</option>
+              <option key={c} value={c}>{countryFlag(c)} {c}</option>
             ))}
           </select>
           <select
@@ -158,24 +161,8 @@ export function WineList({
               <option key={c}>{c}</option>
             ))}
           </select>
-          <label className="filter-check">
-            <input
-              type="checkbox"
-              name="vivinoMin"
-              value="4"
-              defaultChecked={!!filters.vivinoMin}
-            />
-            Vivino 4.0+
-          </label>
-          <label className="filter-check">
-            <input
-              type="checkbox"
-              name="myMin"
-              value="4"
-              defaultChecked={!!filters.myMin}
-            />
-            내 평점 4.0+
-          </label>
+          <RatingFilter name="vivinoMin" label="Vivino 평점" initial={ratingMinimum(filters.vivinoMin)} />
+          <RatingFilter name="myMin" label="내 평점" initial={ratingMinimum(filters.myMin)} />
           <Button variant="outline" type="submit">
             적용
           </Button>
@@ -220,6 +207,7 @@ export function WineList({
                     )}
                     <h2>{s.wine.name_ko}</h2>
                     <p className="origin">
+                      <span aria-hidden="true">{countryFlag(s.wine.country)} </span>
                       {[s.wine.country, s.wine.region]
                         .filter(Boolean)
                         .join(" · ") || "생산지 미확인"}
@@ -327,7 +315,7 @@ export function WineDetail({
         </div>
         <div>
           <p className="eyebrow">
-            {wineTypes[wine.wine_type]} · {wine.country ?? "생산지 미확인"}
+            {wineTypes[wine.wine_type]} · <span aria-hidden="true">{countryFlag(wine.country)} </span>{wine.country ?? "생산지 미확인"}
           </p>
           <h1>{wine.name_ko}</h1>
           <p className="subtitle">

@@ -47,7 +47,7 @@ button:disabled {
   outline: 3px solid #a87985;
   outline-offset: 3px;
 }
-input:not([type="checkbox"]),
+input:not([type="checkbox"]):not([type="range"]),
 select,
 textarea {
   background: #fff;
@@ -323,6 +323,30 @@ main {
   min-height: 44px;
   padding: 0 7px;
 }
+.rating-filter {
+  flex: 1 1 155px;
+  min-width: 0;
+  max-width: 245px;
+}
+.rating-filter label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  font-size: 13px;
+}
+.rating-filter output {
+  margin-left: auto;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}
+.rating-filter input[type="range"] {
+  display: block;
+  width: 100%;
+  margin: 0;
+  height: 44px;
+  accent-color: var(--primary);
+}
 .reset-link {
   color: var(--muted);
   font-size: 12px;
@@ -516,8 +540,8 @@ main {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 18px;
-  color: #73786b;
-  font-size: 12px;
+  color: #62675b;
+  font-size: 16px;
   margin-top: 24px;
 }
 .my-rating {
@@ -556,6 +580,7 @@ main {
   align-items: center;
   gap: 10px;
 }
+.my-rating strong,
 .rating-value > strong {
   font-size: 28px;
   font-weight: 600;
@@ -1001,7 +1026,7 @@ footer span {
   }
   .wine-personal {
     gap: 5px 12px;
-    font-size: 11px;
+    font-size: 14px;
     margin-top: 12px;
   }
   .wine-card-metrics {
@@ -1015,6 +1040,7 @@ footer span {
     flex-wrap: wrap;
     gap: 2px 5px;
   }
+  .my-rating strong,
   .rating-value > strong {
     font-size: 22px;
   }

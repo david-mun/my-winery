@@ -44,6 +44,19 @@ test("fictional collection search, filters and detail work without layout overfl
     page.getByRole("heading", { name: /내 와인 컬렉션/ }),
   ).toBeVisible();
   await expect(page.locator(".wine-card")).toHaveCount(4);
+  const vivino = page.getByRole("slider", { name: "Vivino 평점 최솟값" });
+  await vivino.press("End");
+  for (let i = 0; i < 8; i++) await vivino.press("ArrowLeft");
+  await page.getByRole("button", { name: "적용", exact: true }).click();
+  await expect(page.locator(".wine-card")).toHaveCount(1);
+  await expect(page.locator(".wine-card .origin")).toContainText("🇳🇿");
+  const mine = page.getByRole("slider", { name: "내 평점 최솟값" });
+  await mine.press("End");
+  for (let i = 0; i < 9; i++) await mine.press("ArrowLeft");
+  await page.getByRole("button", { name: "적용", exact: true }).click();
+  await expect(page.getByText("검색 결과가 없습니다")).toBeVisible();
+  await page.getByRole("link", { name: "초기화", exact: true }).click();
+  await expect(page.locator(".wine-card")).toHaveCount(4);
   await page.getByLabel("와인 검색").fill("루나");
   await page.getByRole("button", { name: "적용", exact: true }).click();
   await expect(page.locator(".wine-card")).toHaveCount(1);
@@ -145,7 +158,7 @@ test("authenticated owner can create wine, receipt, note, edit and delete withou
   await expect(photo).toHaveCount(0);
   await expect(page.locator(".detail-hero .bottle-art")).toBeVisible();
   expect((await page.request.get(photoUrl!)).status()).toBe(404);
-  await page.getByLabel("내 평점", { exact: true }).selectOption("4");
+  await page.getByLabel("내 평점", { exact: true }).fill("4.3");
   await page.getByLabel("후기", { exact: true }).fill("첫 시음 기록");
   await page
     .getByRole("button", { name: "시음 노트 저장", exact: true })

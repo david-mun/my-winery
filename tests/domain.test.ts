@@ -48,7 +48,7 @@ describe("domain and migration", () => {
       noteInput.safeParse({
         wine_id: id,
         vintage_label: "NV",
-        my_rating: 3.7,
+        my_rating: 3.75,
         review_text: null,
         tasted_on: null,
       }).success,

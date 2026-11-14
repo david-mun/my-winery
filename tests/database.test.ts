@@ -228,6 +228,16 @@ describe("PostgreSQL migrations and real RLS (PGlite)", () => {
     await denied("delete from receipt_line_wines");
     await denied("update purchase_receipts set paid_amount=0");
   });
+  it("stores tenths and rejects personal ratings outside the new scale", async () => {
+    await apply();
+    await as(A);
+    const sql = "insert into tasting_notes(owner_id,wine_id,my_rating) values($1,$2,$3) returning my_rating::text as score";
+    const wine = plan().wines[0].id;
+    for (const score of ["1.0", "3.7", "5.0"])
+      expect((await value(sql, [A, wine, score]))?.score).toBe(score);
+    for (const score of ["0.5", "4.25", "5.1"])
+      await denied(sql, [A, wine, score]);
+  });
   it("RPC rejects reconciliation mismatch and rolls back all partial receipt writes", async () => {
     await apply();
     await as(A);
