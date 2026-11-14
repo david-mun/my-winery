@@ -673,6 +673,10 @@ main {
   align-items: center;
   justify-content: center;
 }
+.detail-bottle .wine-photo {
+  object-fit: contain;
+  background: #fff;
+}
 .detail-bottle .bottle-art {
   transform: scale(1.4);
 }

@@ -135,6 +135,7 @@ test("authenticated owner can create wine, receipt, note, edit and delete withou
   await page.reload();
   const cover = page.locator(".detail-hero img");
   await expect(cover).toHaveAttribute("src", photoUrl!);
+  await expect(cover).toHaveCSS("object-fit", "contain");
   await expect.poll(() => cover.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
   await page.getByRole("button", { name: "사진 삭제", exact: true }).click();
   await page.getByRole("button", { name: "취소", exact: true }).click();
