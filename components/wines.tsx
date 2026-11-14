@@ -21,6 +21,7 @@ import {
   type Wine,
 } from "@/lib/domain";
 import { countryFlag } from "@/lib/country-flag";
+import { WineSort } from "./wine-sort";
 import { RatingFilter } from "./rating-filter";
 import { Button } from "./ui/button";
 export function Bottle({ type = "white" }: { type?: string }) {
@@ -114,7 +115,7 @@ export function WineList({
         </div>
       </div>
       <form
-        key={JSON.stringify(filters)}
+        key={JSON.stringify({ ...filters, sort: undefined })}
         className="filters"
         action={demo ? "/demo" : "/wines"}
       >
@@ -174,18 +175,7 @@ export function WineList({
           <span>
             와인 <strong>{cards.length}</strong>종
           </span>
-          <select
-            aria-label="정렬"
-            name="sort"
-            defaultValue={filters.sort ?? "latest"}
-          >
-            <option value="latest">최근 구매순</option>
-            <option value="name">이름순</option>
-            <option value="vivino">Vivino 높은순</option>
-            <option value="mine">내 평점 높은순</option>
-            <option value="priceAsc">최근 단가 낮은순</option>
-            <option value="priceDesc">최근 단가 높은순</option>
-          </select>
+          <WineSort key={filters.sort ?? "latest"} sort={filters.sort ?? "latest"} />
         </div>
       </form>
       {cards.length ? (

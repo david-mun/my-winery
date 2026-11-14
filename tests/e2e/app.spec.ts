@@ -44,6 +44,10 @@ test("fictional collection search, filters and detail work without layout overfl
     page.getByRole("heading", { name: /내 와인 컬렉션/ }),
   ).toBeVisible();
   await expect(page.locator(".wine-card")).toHaveCount(4);
+  await page.getByLabel("정렬").selectOption("vivino");
+  await expect(page).toHaveURL(/sort=vivino/);
+  await expect(page.locator(".wine-card h2").first()).toHaveText("루나 힐 소비뇽 블랑");
+  await expect(page.locator(".wine-card h2").last()).toHaveText("메종 에투알 브뤼");
   const vivino = page.getByRole("slider", { name: "Vivino 평점 최솟값" });
   await vivino.press("End");
   for (let i = 0; i < 8; i++) await vivino.press("ArrowLeft");
