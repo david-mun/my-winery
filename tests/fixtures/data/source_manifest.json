@@ -1,0 +1,13 @@
+{
+  "source": {
+    "source_file_id": "fictional-test-fixture",
+    "drive_title": "Test fixture",
+    "sheet_tab": "Test"
+  },
+  "validation": {
+    "paid_by_date_krw": {
+      "2026-09-13": 143500,
+      "2026-10-10": 150400
+    }
+  }
+}

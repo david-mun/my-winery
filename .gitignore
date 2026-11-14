@@ -1,0 +1,44 @@
+# Secrets / local env
+.env
+.env.*
+!.env.example
+!.env.test.example
+*.pem
+*.key
+
+# Node / Next / tooling
+node_modules/
+.next/
+out/
+build/
+dist/
+coverage/
+playwright-report/
+test-results/
+.vercel/
+.supabase/
+*.tsbuildinfo
+.DS_Store
+
+# Local media uploads / personal receipts
+local_uploads/
+private_receipts/
+
+# Generated from lockfile for same-origin, in-browser receipt OCR
+public/receipt-ocr/
+
+# Operator-only first-login handoff; never publish.
+.local-private/
+
+# Private source snapshots and original handoff document
+/data/*
+!/data/validate_snapshot.py
+/docs/architecture.docx
+
+# Generated typings, workstation settings and runtime output
+/next-env.d.ts
+.vscode/
+.idea/
+*.log
+supabase/.temp/
+supabase/.branches/

@@ -1,0 +1,10 @@
+data/
+database/
+docs/
+supabase/
+scripts/
+tests/
+test-results/
+playwright-report/
+.env.local
+.local-private/
