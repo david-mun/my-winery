@@ -525,6 +525,16 @@ main {
   align-items: center;
   gap: 5px;
 }
+.wine-tasting-note {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
 .my-rating svg,
 .my-rating strong {
   color: var(--primary);
@@ -654,6 +664,8 @@ main {
   align-items: center;
 }
 .detail-bottle {
+  position: relative;
+  overflow: hidden;
   height: 300px;
   border-radius: 14px;
   background: #eeeee3;

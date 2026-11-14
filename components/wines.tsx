@@ -17,6 +17,7 @@ import {
   vintageLabel,
   type Collection,
   type Filters,
+  type Wine,
 } from "@/lib/domain";
 import { Button } from "./ui/button";
 export function Bottle({ type = "white" }: { type?: string }) {
@@ -35,6 +36,14 @@ export function Bottle({ type = "white" }: { type?: string }) {
       </div>
       <div className="bottle-shadow" />
     </div>
+  );
+}
+function WineCover({ wine, assets }: { wine: Wine; assets: Collection["assets"] }) {
+  const photo = assets.find((asset) => asset.wine_id === wine.id);
+  return photo ? (
+    <img className="wine-photo" src={`/api/media/${photo.id}`} alt={wine.name_ko} />
+  ) : (
+    <Bottle type={wine.wine_type} />
   );
 }
 export function WineList({
@@ -201,15 +210,7 @@ export function WineList({
                 href={demo ? `/demo?wine=${s.wine.id}` : `/wines/${s.wine.id}`}
               >
                 <div className={`wine-visual ${s.wine.wine_type}`}>
-                  {data.assets.find((a) => a.wine_id === s.wine.id) ? (
-                    <img
-                      className="wine-photo"
-                      src={`/api/media/${data.assets.find((a) => a.wine_id === s.wine.id)!.id}`}
-                      alt={s.wine.name_ko}
-                    />
-                  ) : (
-                    <Bottle type={s.wine.wine_type} />
-                  )}
+                  <WineCover wine={s.wine} assets={data.assets} />
                 </div>
                 <div className="wine-card-content">
                   <div className="wine-card-info">
@@ -232,6 +233,11 @@ export function WineList({
                         {s.receipts.length}회 구매 · {s.bottles}병
                       </span>
                     </div>
+                    {s.tastingNote && (
+                      <p className="wine-tasting-note">
+                        <strong>시음 노트</strong> {s.tastingNote}
+                      </p>
+                    )}
                   </div>
                   <div className="wine-card-metrics">
                     <div className="wine-external-rating">
@@ -317,7 +323,7 @@ export function WineDetail({
       </Link>
       <div className="detail-hero">
         <div className={`detail-bottle ${wine.wine_type}`}>
-          <Bottle type={wine.wine_type} />
+          <WineCover wine={wine} assets={data.assets} />
         </div>
         <div>
           <p className="eyebrow">

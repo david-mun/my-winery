@@ -48,6 +48,9 @@ test("fictional collection search, filters and detail work without layout overfl
   await page.getByRole("button", { name: "적용", exact: true }).click();
   await expect(page.locator(".wine-card")).toHaveCount(1);
   await expect(page).toHaveURL(/q=/);
+  await expect(page.locator(".wine-card .wine-tasting-note")).toContainText(
+    "산뜻한 향과 여운.",
+  );
   await page.locator(".wine-card").click();
   await expect(
     page.getByRole("heading", { name: "루나 힐 소비뇽 블랑" }),
@@ -129,12 +132,17 @@ test("authenticated owner can create wine, receipt, note, edit and delete withou
 
   const photo = page.getByAltText("내 와인 사진");
   const photoUrl = await photo.getAttribute("src");
+  await page.reload();
+  const cover = page.locator(".detail-hero img");
+  await expect(cover).toHaveAttribute("src", photoUrl!);
+  await expect.poll(() => cover.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
   await page.getByRole("button", { name: "사진 삭제", exact: true }).click();
   await page.getByRole("button", { name: "취소", exact: true }).click();
   await expect(photo).toBeVisible();
   await page.getByRole("button", { name: "사진 삭제", exact: true }).click();
   await page.getByRole("button", { name: "삭제 확인", exact: true }).click();
   await expect(photo).toHaveCount(0);
+  await expect(page.locator(".detail-hero .bottle-art")).toBeVisible();
   expect((await page.request.get(photoUrl!)).status()).toBe(404);
   await page.getByLabel("내 평점", { exact: true }).selectOption("4");
   await page.getByLabel("후기", { exact: true }).fill("첫 시음 기록");

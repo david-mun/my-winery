@@ -265,19 +265,20 @@ export function wineSummary(wine: Wine, data: Collection) {
         b.created_at.localeCompare(a.created_at) ||
         b.id.localeCompare(a.id),
     )[0];
-  const note = data.notes
+  const notes = data.notes
     .filter((r) => r.wine_id === wine.id)
     .sort(
       (a, b) =>
         b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id),
-    )[0];
+    );
   return {
     wine,
     links,
     receipts,
     price,
     rating,
-    myRating: note?.my_rating ?? null,
+    myRating: notes[0]?.my_rating ?? null,
+    tastingNote: notes.find((note) => note.review_text?.trim())?.review_text?.trim() ?? null,
     bottles: links.reduce((s, l) => s + l.bottle_quantity, 0),
     latest: receipts[0]?.purchased_on ?? null,
   };
