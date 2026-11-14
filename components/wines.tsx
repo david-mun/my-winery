@@ -207,17 +207,7 @@ export function WineList({
                         <Star size={14} aria-hidden="true" />내 평점{" "}
                         <strong>{s.myRating?.toFixed(1) ?? "—"}</strong>
                       </span>
-                      <span>
-                        {s.receipts.length}회 구매 · {s.bottles}병
-                      </span>
                     </div>
-                    {s.tastingNote && (
-                      <p className="wine-tasting-note">
-                        <strong>시음 노트</strong> {s.tastingNote}
-                      </p>
-                    )}
-                  </div>
-                  <div className="wine-card-metrics">
                     <div className="wine-external-rating">
                       <span className="metric-label">
                         {demo ? "예시 점수" : "Vivino 기록"}
@@ -246,6 +236,17 @@ export function WineList({
                           <span className="rating-warning">매칭 확인 필요</span>
                         )}
                       </p>
+                    </div>
+                    {s.tastingNote && (
+                      <p className="wine-tasting-note">
+                        <strong>시음 노트</strong> {s.tastingNote}
+                      </p>
+                    )}
+                  </div>
+                  <div className="wine-card-metrics">
+                    <div className="wine-purchases">
+                      <span className="metric-label">구매 기록</span>
+                      <strong>{s.receipts.length}회 · {s.bottles}병</strong>
                     </div>
                     <div className="wine-price">
                       <span className="metric-label">최근 구매 단가</span>

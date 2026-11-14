@@ -503,7 +503,7 @@ main {
 .wine-card-content {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 192px;
+  grid-template-columns: minmax(0, 1fr) minmax(225px, 35%);
   gap: 28px;
   align-items: center;
   padding: 26px 32px 26px 0;
@@ -563,9 +563,16 @@ main {
 .my-rating strong {
   color: var(--primary);
 }
+.wine-external-rating {
+  margin-top: 6px;
+}
 .wine-card-metrics {
   display: grid;
-  gap: 18px;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  align-items: baseline;
+  gap: 12px;
+}
+.wine-price {
   text-align: right;
 }
 .metric-label {
@@ -576,7 +583,6 @@ main {
 }
 .rating-value {
   display: flex;
-  justify-content: flex-end;
   align-items: center;
   gap: 10px;
 }
@@ -611,6 +617,7 @@ main {
   display: block;
   color: var(--primary);
 }
+.wine-purchases strong,
 .wine-price strong {
   display: block;
   font-size: 21px;
@@ -905,18 +912,9 @@ footer span {
     padding: 20px 20px 20px 0;
   }
   .wine-card-metrics {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 12px;
-    align-items: start;
     border-top: 1px solid #efefe9;
     padding-top: 14px;
     text-align: left;
-  }
-  .rating-value {
-    justify-content: flex-start;
-  }
-  .wine-price {
-    text-align: right;
   }
   .wine-personal {
     margin-top: 14px;
@@ -1051,6 +1049,7 @@ footer span {
   .rating-date {
     font-size: 9px;
   }
+  .wine-purchases strong,
   .wine-price strong {
     font-size: 16px;
   }
