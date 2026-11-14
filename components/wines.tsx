@@ -5,10 +5,8 @@ import {
   Wine as WineIcon,
   Plus,
   Search,
-  Grape,
-  MapPin,
-  CalendarDays,
-  ShoppingCart,
+  Star,
+  ArrowUpRight,
   SlidersHorizontal,
 } from "lucide-react";
 import {
@@ -21,20 +19,6 @@ import {
   type Filters,
 } from "@/lib/domain";
 import { Button } from "./ui/button";
-const countryFlags: Record<string, string> = {
-  뉴질랜드: "🇳🇿",
-  프랑스: "🇫🇷",
-  이탈리아: "🇮🇹",
-  스페인: "🇪🇸",
-  미국: "🇺🇸",
-  호주: "🇦🇺",
-  칠레: "🇨🇱",
-  아르헨티나: "🇦🇷",
-  독일: "🇩🇪",
-  포르투갈: "🇵🇹",
-  남아프리카공화국: "🇿🇦",
-  한국: "🇰🇷",
-};
 export function Bottle({ type = "white" }: { type?: string }) {
   return (
     <div className={`bottle-art ${type}`} aria-hidden="true">
@@ -210,122 +194,89 @@ export function WineList({
       </form>
       {cards.length ? (
         <ul className="wine-list" aria-label="와인 목록">
-          {cards.map((summary, index) => {
-            const { wine, rating, myRating, receipts, bottles, price, latest } =
-              summary;
-            const cover = data.assets.find(
-              (asset) => asset.wine_id === wine.id,
-            );
-            const region = [wine.country, wine.region]
-              .filter(Boolean)
-              .join(" · ");
-            const flag = countryFlags[wine.country ?? ""];
-            return (
-              <li key={wine.id}>
-                <Link
-                  className="wine-card"
-                  href={demo ? `/demo?wine=${wine.id}` : `/wines/${wine.id}`}
-                >
-                  <div className={`wine-visual ${wine.wine_type}`}>
-                    {cover ? (
-                      <img
-                        className="wine-photo"
-                        src={`/api/media/${cover.id}`}
-                        alt=""
-                        loading={index === 0 ? "eager" : "lazy"}
-                      />
-                    ) : (
-                      <div className="cellar-label" aria-hidden="true">
-                        <Grape strokeWidth={1.15} />
-                        <strong>{wine.name_original || wine.name_ko}</strong>
-                        <span>{wine.grape || wineTypes[wine.wine_type]}</span>
-                      </div>
+          {cards.map((s) => (
+            <li key={s.wine.id}>
+              <Link
+                className="wine-card"
+                href={demo ? `/demo?wine=${s.wine.id}` : `/wines/${s.wine.id}`}
+              >
+                <div className={`wine-visual ${s.wine.wine_type}`}>
+                  {data.assets.find((a) => a.wine_id === s.wine.id) ? (
+                    <img
+                      className="wine-photo"
+                      src={`/api/media/${data.assets.find((a) => a.wine_id === s.wine.id)!.id}`}
+                      alt={s.wine.name_ko}
+                    />
+                  ) : (
+                    <Bottle type={s.wine.wine_type} />
+                  )}
+                </div>
+                <div className="wine-card-content">
+                  <div className="wine-card-info">
+                    <p className="wine-kind">{wineTypes[s.wine.wine_type]}</p>
+                    {s.wine.producer && (
+                      <p className="wine-producer">{s.wine.producer}</p>
                     )}
-                  </div>
-                  <div className="wine-card-content">
-                    <div className="wine-card-heading">
-                      <div>
-                        <h2>{wine.name_ko}</h2>
-                        {(wine.name_original || wine.producer) && (
-                          <p>
-                            {[wine.name_original, wine.producer]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </p>
-                        )}
-                      </div>
-                      {rating && (
-                        <span className="wine-source">
-                          <Grape size={16} aria-hidden="true" />
-                          {demo ? "예시 기록" : "Vivino 기록"}
-                        </span>
-                      )}
-                    </div>
-                    <p className="wine-origin">
-                      {flag ? (
-                        <span aria-hidden="true">{flag}</span>
-                      ) : (
-                        <MapPin size={16} aria-hidden="true" />
-                      )}
-                      {region || "생산지 미확인"}
-                      <span className="wine-type-name">
-                        {wineTypes[wine.wine_type]}
-                      </span>
+                    <h2>{s.wine.name_ko}</h2>
+                    <p className="origin">
+                      {[s.wine.country, s.wine.region]
+                        .filter(Boolean)
+                        .join(" · ") || "생산지 미확인"}
                     </p>
-                    <dl className="wine-card-metrics">
-                      <div className="wine-external-rating">
-                        <dt>{demo ? "예시 평점" : "Vivino 평점"}</dt>
-                        <dd>
-                          <strong>{rating?.score?.toFixed(1) ?? "—"}</strong>
-                          {rating?.score != null && (
-                            <span className="rating-stars" aria-hidden="true">
-                              ★★★★★
-                              <span style={{ width: `${rating.score * 20}%` }}>
-                                ★★★★★
-                              </span>
-                            </span>
-                          )}
-                        </dd>
-                        {rating?.checked_on && (
-                          <small>평점 확인 {rating.checked_on}</small>
-                        )}
-                        {rating?.verification_status === "needs_review" && (
-                          <small className="rating-warning">
-                            매칭 확인 필요
-                          </small>
-                        )}
-                      </div>
-                      <div>
-                        <dt>내 평점</dt>
-                        <dd className="wine-accent">
-                          {myRating?.toFixed(1) ?? "—"}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>구매 횟수</dt>
-                        <dd>{receipts.length}회</dd>
-                      </div>
-                      <div>
-                        <dt>구매 수량</dt>
-                        <dd>{bottles}병</dd>
-                      </div>
-                    </dl>
-                    <div className="wine-card-footer">
-                      <span>
-                        <ShoppingCart size={17} aria-hidden="true" />
-                        최근 구매 단가{" "}
-                        <strong className="wine-accent">{won(price)}</strong>
+                    <div className="wine-personal">
+                      <span className="my-rating">
+                        <Star size={14} aria-hidden="true" />내 평점{" "}
+                        <strong>{s.myRating?.toFixed(1) ?? "—"}</strong>
                       </span>
                       <span>
-                        <CalendarDays size={17} aria-hidden="true" />
-                        최근 구매일 <b>{latest ?? "—"}</b>
+                        {s.receipts.length}회 구매 · {s.bottles}병
                       </span>
                     </div>
                   </div>
-                </Link>
-              </li>
-            );
-          })}
+                  <div className="wine-card-metrics">
+                    <div className="wine-external-rating">
+                      <span className="metric-label">
+                        {demo ? "예시 점수" : "Vivino 기록"}
+                      </span>
+                      <div className="rating-value">
+                        <strong>{s.rating?.score?.toFixed(1) ?? "—"}</strong>
+                        {s.rating?.score != null && (
+                          <span className="rating-stars" aria-hidden="true">
+                            <span>★★★★★</span>
+                            <span
+                              className="rating-stars-fill"
+                              style={{
+                                width: `${(s.rating.score / 5) * 100}%`,
+                              }}
+                            >
+                              ★★★★★
+                            </span>
+                          </span>
+                        )}
+                      </div>
+                      <p className="rating-date">
+                        {s.rating?.checked_on
+                          ? `${s.rating.checked_on} 확인`
+                          : "외부 평점 미등록"}
+                        {s.rating?.verification_status === "needs_review" && (
+                          <span className="rating-warning">매칭 확인 필요</span>
+                        )}
+                      </p>
+                    </div>
+                    <div className="wine-price">
+                      <span className="metric-label">최근 구매 단가</span>
+                      <strong>{won(s.price)}</strong>
+                    </div>
+                  </div>
+                </div>
+                <ArrowUpRight
+                  className="card-open"
+                  size={18}
+                  aria-hidden="true"
+                />
+              </Link>
+            </li>
+          ))}
         </ul>
       ) : (
         <div className="empty-state">
