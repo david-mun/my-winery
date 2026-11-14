@@ -1,7 +1,7 @@
 data/
 database/
 docs/
-supabase/
+/supabase/
 scripts/
 tests/
 test-results/

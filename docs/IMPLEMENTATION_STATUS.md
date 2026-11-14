@@ -34,7 +34,7 @@
 - 원격 Auth 회원 등록과 관리자 역할 부여를 완료했다. 운영자용 일회성 링크는 권한 0600의 로컬 파일로 전달한다. 사용자가 첫 비밀번호를 정한다.
 - 원격 Auth 설정 조회에서 `disable_signup=true`를 확인했다. 실제 초대·재설정 메일 전달에는 사용자 지정 SMTP 및 메일 템플릿 구성이 남았다.
 - 네이티브 PostgreSQL의 다중 연결 경쟁 조건, 원격 소유자 RLS와 private Storage를 검증했다. 로컬 화면은 `npm run dev` 후 `/login`에서 접근한다. `/demo`는 가상 데이터다.
-- Vercel 배포, 외부 메일 수신 및 iOS·Android 실기기 설치는 검증 범위 밖이다.
+- Vercel 운영 주소는 https://my-winery.vercel.app 이다. 배포 후 운영 도메인에서 로그인, 구매 조회, 관리자 접근을 검증했다. 외부 메일 수신 및 iOS·Android 실기기 설치는 미검증이다.
 
 ## 진행 기록 (각 단계 완료 당시)
 
