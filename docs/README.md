@@ -6,12 +6,17 @@
 
 ## 읽는 순서
 
+현재 Gemini 입력 구현은 [GEMINI_INTEGRATION.md](GEMINI_INTEGRATION.md)를 먼저 확인한다. v1 설계/테스트는 이력으로 보존한다.
+
 | 문서 | 역할 |
 |---|---|
 | [SETUP.md](SETUP.md) | 로컬 실행, DB/Auth 설정, 최초 관리자, 승인 후 이관 명령 |
 | [TEST_REPORT.md](TEST_REPORT.md) | 실제 실행한 검증과 통합 검수 한계 |
 | [architecture.md](architecture.md) | 제품 개요, 기존 와이어프레임, 전체 아키텍처 |
 | [PRODUCT_SPEC.md](PRODUCT_SPEC.md) | MVP 범위, 화면별 행동, 값의 표시·입력 규칙 |
+| [GEMINI_PHOTO_ANALYSIS.md](GEMINI_PHOTO_ANALYSIS.md) | 2026-11-15 후속 설계: 영수증·와인 사진 → Gemini 초안, 와인 상세·JSON 계약, 검수·회계·개인정보·오류 처리 |
+| [GEMINI_API_TEST_2026-11-17.md](GEMINI_API_TEST_2026-11-17.md) | 사용자 제공 실제 이미지 API 테스트 결과·회계 대조·스키마/사실성 오류·연동 전 보완점 |
+| [Gemini JSON Schema v1](schemas/gemini-analysis-v1.schema.json) | 모델 응답 구조; [와인 라벨 예제](examples/gemini-wine-label-v1.json)·[영수증 예제](examples/gemini-receipt-v1.json)는 가상 데이터 |
 | [DATA_MIGRATION.md](DATA_MIGRATION.md) | CSV 매핑, 영수증 계산, 중복 방지, 이관 검수 |
 | [SECURITY_AND_SCHEMA_REVIEW.md](SECURITY_AND_SCHEMA_REVIEW.md) | SQL 초안의 미완성 항목, 권한·Storage·관리자 설계 |
 | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | 구현 순서, 테스트 인수 기준, 환경·출시 준비 |
@@ -26,6 +31,7 @@
 - [architecture.docx](architecture.docx)는 인수받은 v1.0 보관본이다. 이번 Markdown 상세화가 반영되지 않았다. 이후 개발 기준은 Markdown 문서 묶음이다.
 - 원본 Google Sheets와 Vivino 링크는 출처 정보다. 이번 인수에서 외부 페이지·실시간 평점·클라우드 계정 상태를 재확인하지 않았다.
 - [최초 구현 프롬프트](../codex/START_PROMPT.md)는 후속 앱 개발용이다. 이번 요청은 문서 구체화로 해석했다.
+- 2026-11-15 Gemini 사진 분석은 문서/JSON 계약을 추가한 단계이며, 키 등록·외부 분석 호출·앱 연동·DB 변경·배포를 완료한 것으로 해석하지 않는다.
 
 ## 인수 중 바로잡은 내용
 

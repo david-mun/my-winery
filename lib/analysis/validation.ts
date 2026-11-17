@@ -1,0 +1,141 @@
+import {
+  receiptAnalysisSchema,
+  wineAnalysisSchema,
+  type AnalysisTask,
+  type AnalysisResult,
+} from "./contracts";
+
+// Independent of Gemini: the provider can be replaced without changing forms.
+export class AnalysisError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+export function validateAnalysis(
+  task: AnalysisTask,
+  value: unknown,
+): AnalysisResult {
+  if (task === "wine-label") {
+    const parsed = wineAnalysisSchema.safeParse(value);
+    if (!parsed.success)
+      throw new AnalysisError(
+        502,
+        "와인 분석 형식이 올바르지 않습니다. 다시 분석하거나 직접 입력해 주세요.",
+      );
+    const data = parsed.data;
+    if (data.bottle_count !== 1 || !data.wine)
+      throw new AnalysisError(
+        422,
+        "한 병의 라벨만 보이도록 영역을 잘라 다시 분석해 주세요.",
+      );
+    const wine = data.wine;
+    const warnings = [...data.warnings];
+    // Keep evidence keyed by field, rather than trusting model-generated paths.
+    for (const field of Object.keys(wine) as (keyof typeof wine)[]) {
+      const v = wine[field];
+      if (v === null || v === "UNKNOWN" || (Array.isArray(v) && v.length === 0))
+        continue;
+      const evidence = data.evidence.find((e) => e.field === field)?.text;
+      if (
+        !evidence ||
+        (field === "vintage_label" && !evidence.includes(String(v)))
+      ) {
+        warnings.push(`사진에서 확인되지 않은 상세 정보를 비워 두었습니다.`);
+        if (field === "grapes") wine.grapes = [];
+        else if (field === "vintage_label") wine.vintage_label = "UNKNOWN";
+        else Object.assign(wine, { [field]: null });
+      }
+    }
+    if (!wine.name)
+      throw new AnalysisError(
+        422,
+        "와인 이름을 읽지 못했습니다. 라벨을 더 가까이 찍거나 직접 입력해 주세요.",
+      );
+    warnings.push(
+      "라벨 원문과 상품 동일성을 확인해 주세요. 사진의 브랜드가 실제 생산자와 다를 수 있습니다.",
+    );
+    return { task, analysis: data, warnings };
+  }
+  const parsed = receiptAnalysisSchema.safeParse(value);
+  if (!parsed.success)
+    throw new AnalysisError(
+      502,
+      "영수증 분석 형식이 올바르지 않습니다. 다시 분석하거나 직접 입력해 주세요.",
+    );
+  const data = parsed.data;
+  const warnings = [...data.warnings];
+  if (
+    data.currency !== "KRW" ||
+    !data.lines.length ||
+    data.lines.some((l) => !["wine", "bundle"].includes(l.kind))
+  )
+    throw new AnalysisError(
+      422,
+      "원화 와인 구매 영수증만 지원합니다. 알 수 없는 품목은 직접 입력해 주세요.",
+    );
+  if (
+    data.lines.some(
+      (l) =>
+        (l.kind === "wine" && l.wines.length !== 1) ||
+        (l.kind === "bundle" && l.wines.length < 2),
+    )
+  )
+    throw new AnalysisError(
+      422,
+      "세트 구성이나 와인 연결을 읽지 못했습니다. 직접 입력하거나 다시 분석해 주세요.",
+    );
+  if (data.purchased_on) {
+    const t = new Date(data.purchased_on);
+    if (
+      !Number.isFinite(t.getTime()) ||
+      t.toISOString().slice(0, 10) !== data.purchased_on ||
+      t.getTime() > Date.now()
+    ) {
+      data.purchased_on = null;
+      warnings.push("구매일을 확인해 입력해 주세요.");
+    }
+  } else warnings.push("구매일을 확인해 입력해 주세요.");
+  for (const line of data.lines) {
+    if (
+      line.amount !== null &&
+      line.unit_price !== null &&
+      line.printed_quantity !== null &&
+      line.unit_price * line.printed_quantity !== line.amount
+    )
+      warnings.push(
+        `${line.raw_label}: 인쇄된 단가·수량·금액이 일치하지 않습니다.`,
+      );
+    for (const bottle of line.wines) {
+      // Two-digit POS suffixes must never become a fabricated vintage.
+      if (
+        bottle.vintage_label !== "UNKNOWN" &&
+        !line.raw_label.includes(bottle.vintage_label)
+      ) {
+        bottle.vintage_label = "UNKNOWN";
+        warnings.push(`${line.raw_label}: 빈티지를 원문에서 확인해 주세요.`);
+      }
+    }
+  }
+  if (
+    data.lines.some(
+      (l) => l.amount === null || l.wines.some((w) => w.quantity === null),
+    ) ||
+    data.paid_amount === null ||
+    data.discount_amount === null
+  )
+    warnings.push(
+      "미확인 금액·수량을 확인해 입력해 주세요. 빈 값은 0원이 아닙니다.",
+    );
+  else if (
+    data.lines.reduce((s, l) => s + (l.amount ?? 0), 0) -
+      data.discount_amount !==
+    data.paid_amount
+  )
+    warnings.push(
+      "품목 합계에서 할인을 뺀 값과 결제액이 다릅니다. 금액을 확인해 주세요.",
+    );
+  return { task, analysis: data, warnings };
+}

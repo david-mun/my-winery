@@ -24,9 +24,6 @@ test-results/
 local_uploads/
 private_receipts/
 
-# Generated from lockfile for same-origin, in-browser receipt OCR
-public/receipt-ocr/
-
 # Operator-only first-login handoff; never publish.
 .local-private/
 

@@ -1,15 +1,19 @@
 "use client";
 /* Private signed images deliberately bypass the shared Next image optimizer. */
 /* eslint-disable @next/next/no-img-element */
-import { parseReceiptText, type OcrDraft } from "@/lib/receipt-ocr";
+import { PhotoAnalysis } from "./analysis/photo-analysis";
+import {
+  wineDescription,
+  wineDisplayName,
+  type AnalysisResult,
+  type ReceiptAnalysis,
+} from "@/lib/analysis/contracts";
 import { WinePhotoInput, type BottlePhoto } from "./wine-photo-input";
 import { DeletePhoto } from "./delete-photo";
-import { ReceiptPhoto } from "./receipt-photo";
 import { CatalogPicker } from "./catalog-picker";
 import { prepareUpload } from "@/lib/image-client";
 import {
   useState,
-  useRef,
   useId,
   cloneElement,
   isValidElement,
@@ -224,63 +228,168 @@ export function AuthForm({
     </div>
   );
 }
-export function WineForm({ wine }: { wine?: Wine }) {
+export function WineForm({
+  wine,
+  existingWines = [],
+}: {
+  wine?: Wine;
+  existingWines?: Wine[];
+}) {
   const s = useSave();
+  const [analysisBusy, setAnalysisBusy] = useState(false);
+  const [values, setValues] = useState({
+    name_ko: wine?.name_ko ?? "",
+    name_original: wine?.name_original ?? "",
+    producer: wine?.producer ?? "",
+    wine_type: wine?.wine_type ?? "",
+    country: wine?.country ?? "",
+    region: wine?.region ?? "",
+    grape: wine?.grape ?? "",
+    description: wine?.description ?? "",
+  });
+  const [photo, setPhoto] = useState<File | null>(null),
+    [attach, setAttach] = useState(true);
+  const [reviewRequired, setReviewRequired] = useState(false),
+    [reviewed, setReviewed] = useState(false);
+  const [savedId, setSavedId] = useState<string | null>(null);
+  const normalize = (v: string) =>
+    v.normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
+  const duplicate =
+    !wine &&
+    !savedId &&
+    existingWines.find((w) =>
+      [w.name_ko, w.name_original]
+        .filter(Boolean)
+        .some((name) =>
+          [values.name_ko, values.name_original]
+            .filter(Boolean)
+            .some((n) => normalize(name!) === normalize(n)),
+        ),
+    );
+  function apply(result: AnalysisResult) {
+    if (result.task !== "wine-label" || !result.analysis.wine) return;
+    if (
+      Object.values(values).some(Boolean) &&
+      !confirm("분석한 초안으로 현재 입력 내용을 교체할까요?")
+    )
+      return;
+    const w = result.analysis.wine;
+    setValues({
+      name_ko: wineDisplayName(w),
+      name_original: wineDisplayName(w),
+      producer: w.producer ?? "",
+      wine_type: w.wine_type ?? "",
+      country: w.country ?? "",
+      region: w.region ?? "",
+      grape: w.grapes.join(", "),
+      description: wineDescription(w),
+    });
+    setReviewRequired(true);
+    setReviewed(false);
+  }
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        const f = new FormData(e.currentTarget);
-        s.save(async () => {
-          const value = {
-            name_ko: string(f, "name_ko"),
-            wine_type: string(f, "wine_type"),
-            name_original: optional(f, "name_original"),
-            producer: optional(f, "producer"),
-            country: optional(f, "country"),
-            region: optional(f, "region"),
-            grape: optional(f, "grape"),
-            description: optional(f, "description"),
-          };
-          const result = await request(
-            `/api/wines${wine ? "/" + wine.id : ""}`,
-            wine ? "PATCH" : "POST",
-            value,
-          );
-          s.router.push("/wines/" + result.id);
+        if (duplicate || (reviewRequired && !reviewed)) return;
+        void s.save(async () => {
+          let id = savedId;
+          if (!id) {
+            const value = {
+              ...values,
+              ...Object.fromEntries(
+                Object.entries(values)
+                  .filter(([key]) => !["name_ko", "wine_type"].includes(key))
+                  .map(([key, value]) => [key, value.trim() || null]),
+              ),
+            };
+            const result = await request(
+              `/api/wines${wine ? "/" + wine.id : ""}`,
+              wine ? "PATCH" : "POST",
+              value,
+            );
+            id = result.id;
+            setSavedId(id);
+          }
+          if (photo && attach) {
+            try {
+              const upload = new FormData();
+              upload.set("kind", "wine");
+              upload.set("target", id!);
+              upload.set("file", photo);
+              await request("/api/media", "POST", upload);
+            } catch {
+              s.setMessage(
+                "와인은 저장됐지만 사진 첨부에 실패했습니다. 다시 눌러 사진만 재시도하거나 상세로 이동하세요.",
+              );
+              return;
+            }
+          }
+          s.router.push("/wines/" + id);
         });
       }}
     >
+      {!wine && !savedId && (
+        <PhotoAnalysis
+          task="wine-label"
+          disabled={s.busy}
+          onFile={setPhoto}
+          onBusyChange={setAnalysisBusy}
+          onApply={apply}
+        />
+      )}
+      {photo && !savedId && (
+        <label className="filter-check">
+          <input
+            type="checkbox"
+            checked={attach}
+            onChange={(e) => setAttach(e.target.checked)}
+          />
+          와인 저장 시 이 사진도 비공개로 첨부
+        </label>
+      )}
       <div className="form-grid">
         <Field label="와인 이름 *">
           <input
             name="name_ko"
             required
             maxLength={200}
-            defaultValue={wine?.name_ko}
+            value={values.name_ko}
+            onChange={(e) => setValues({ ...values, name_ko: e.target.value })}
           />
         </Field>
         <Field label="종류">
-          <select name="wine_type" defaultValue={wine?.wine_type ?? "white"}>
-            {Object.entries(wineTypes).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v}
+          <select
+            name="wine_type"
+            required
+            value={values.wine_type}
+            onChange={(e) =>
+              setValues({ ...values, wine_type: e.target.value })
+            }
+          >
+            <option value="">종류 확인 필요</option>
+            {Object.entries(wineTypes).map(([key, label]) => (
+              <option key={key} value={key}>
+                {label}
               </option>
             ))}
           </select>
         </Field>
-        {[
-          ["name_original", "원어 이름"],
-          ["producer", "생산자"],
-          ["country", "국가"],
-          ["region", "지역"],
-          ["grape", "품종"],
-        ].map(([key, label]) => (
+        {(
+          [
+            ["name_original", "원어 이름"],
+            ["producer", "생산자"],
+            ["country", "국가"],
+            ["region", "지역"],
+            ["grape", "품종"],
+          ] as const
+        ).map(([key, label]) => (
           <Field key={key} label={label}>
             <input
               name={key}
               maxLength={200}
-              defaultValue={(wine?.[key as keyof Wine] as string) ?? ""}
+              value={values[key]}
+              onChange={(e) => setValues({ ...values, [key]: e.target.value })}
             />
           </Field>
         ))}
@@ -288,15 +397,50 @@ export function WineForm({ wine }: { wine?: Wine }) {
           <textarea
             name="description"
             maxLength={5000}
-            defaultValue={wine?.description ?? ""}
+            value={values.description}
+            onChange={(e) =>
+              setValues({ ...values, description: e.target.value })
+            }
           />
         </Field>
       </div>
+      {duplicate && (
+        <p role="status">
+          같은 이름의 와인이 이미 있습니다.{" "}
+          <Link className="text-link" href={"/wines/" + duplicate.id}>
+            기존 와인 확인
+          </Link>
+        </p>
+      )}
+      {reviewRequired && (
+        <label className="filter-check">
+          <input
+            type="checkbox"
+            checked={reviewed}
+            onChange={(e) => setReviewed(e.target.checked)}
+          />
+          원본 라벨과 와인 상세를 확인했습니다.
+        </label>
+      )}
       <div className="form-actions">
-        <Button disabled={s.busy}>{s.busy ? "저장 중…" : "와인 저장"}</Button>
+        <Button
+          disabled={
+            s.busy ||
+            analysisBusy ||
+            !!duplicate ||
+            (reviewRequired && !reviewed)
+          }
+        >
+          {s.busy ? "저장 중…" : savedId ? "사진 다시 첨부" : "와인 저장"}
+        </Button>
         <span role="status" className="form-message">
           {s.message}
         </span>
+        {savedId && (
+          <Link href={"/wines/" + savedId} className="text-link">
+            저장한 와인 상세
+          </Link>
+        )}
       </div>
     </form>
   );
@@ -541,47 +685,44 @@ export function ReceiptForm({
     [paid, setPaid] = useState<number | "">(initial?.paid_amount ?? 0);
   const [date, setDate] = useState(initial?.purchased_on ?? today());
   const [merchant, setMerchant] = useState(initial?.merchant_id ?? "");
-  const [ocrText, setOcrText] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
+  const [analysisBusy, setAnalysisBusy] = useState(false);
   const [attachPhoto, setAttachPhoto] = useState(true);
-  const ocrPanel = useRef<HTMLDetailsElement>(null);
-  const [draft, setDraft] = useState<OcrDraft | null>(null);
-  const [ocrError, setOcrError] = useState("");
+  const [draft, setDraft] = useState<ReceiptAnalysis | null>(null);
   const [reviewed, setReviewed] = useState(false);
   const [composingLine, setComposingLine] = useState<number | null>(null);
-  function applyOcr() {
-    try {
-      const result = parseReceiptText(ocrText);
-      setLines(
-        result.items.map((item) => ({
-          line_kind: "wine",
-          raw_label: item.label,
-          line_amount: item.amount ?? "",
-          wines: [
-            {
-              wine_id: undefined,
-              vintage_label: "UNKNOWN",
-              bottle_quantity: item.quantity ?? "",
-            },
-          ],
-        })),
-      );
-      setDate(result.date ?? "");
-      setPaid(result.paid ?? "");
-      setDiscount(result.discount ?? "");
-      setMerchant(
-        data.merchants.find((m) => m.name === result.merchant)?.id ?? "",
-      );
-      setDraft(result);
-      setReviewed(false);
-      setOcrText("");
-      setOcrError("");
-      s.setMessage("");
-    } catch (err) {
-      setOcrError(
-        err instanceof Error ? err.message : "인식 결과를 읽지 못했습니다.",
-      );
-    }
+  function applyAnalysis(result: AnalysisResult) {
+    if (result.task !== "receipt") return;
+    if (!confirm("분석한 초안으로 현재 구매 입력 내용을 교체할까요?")) return;
+    const value = result.analysis;
+    setLines(
+      value.lines.map((line) => ({
+        line_kind: line.kind as "wine" | "bundle",
+        raw_label: line.raw_label,
+        line_amount: line.amount ?? "",
+        wines: line.wines.map((w) => {
+          const name = w.name ?? line.raw_label;
+          const matches = data.wines.filter(
+            (x) => x.name_ko === name || x.name_original === name,
+          );
+          return {
+            wine_id: matches.length === 1 ? matches[0].id : undefined,
+            wine_name: matches.length === 1 ? undefined : name,
+            vintage_label: w.vintage_label,
+            bottle_quantity: w.quantity ?? "",
+          };
+        }),
+      })),
+    );
+    setDate(value.purchased_on ?? "");
+    setPaid(value.paid_amount ?? "");
+    setDiscount(value.discount_amount ?? "");
+    setMerchant(
+      data.merchants.find((m) => m.name === value.merchant)?.id ?? "",
+    );
+    setDraft(value);
+    setReviewed(false);
+    s.setMessage("");
   }
   const duplicate =
     draft &&
@@ -590,13 +731,15 @@ export function ReceiptForm({
     );
   const change = (i: number, update: Partial<EditorLine>) =>
     setLines((old) => old.map((l, k) => (k === i ? { ...l, ...update } : l)));
+  const amountsComplete =
+    paid !== "" && discount !== "" && lines.every((l) => l.line_amount !== "");
   const sum =
     lines.reduce((s, l) => s + Number(l.line_amount), 0) - Number(discount);
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        if (draft && (!reviewed || discount === "")) return;
+        if (!amountsComplete || (draft && !reviewed)) return;
         const f = new FormData(e.currentTarget);
         s.save(async () => {
           const payload = receiptInput.parse({
@@ -661,15 +804,23 @@ export function ReceiptForm({
     >
       {!initial && (
         <>
-          <ReceiptPhoto
-            disabled={s.busy}
-            onFile={setPhoto}
-            onText={(text) => {
-              setOcrText(text);
-              setOcrError("");
-              if (text && ocrPanel.current) ocrPanel.current.open = true;
-            }}
-          />
+          {demo ? (
+            <p className="auth-notice">
+              사진 분석은 로그인 후 사용할 수 있습니다. 데모에서는 직접 입력을
+              체험하세요.
+            </p>
+          ) : (
+            <PhotoAnalysis
+              task="receipt"
+              disabled={s.busy}
+              onFile={(file) => {
+                setPhoto(file);
+                setReviewed(false);
+              }}
+              onBusyChange={setAnalysisBusy}
+              onApply={applyAnalysis}
+            />
+          )}
           {photo && !demo && (
             <label className="filter-check">
               <input
@@ -680,49 +831,16 @@ export function ReceiptForm({
               구매 저장 시 이 사진도 비공개로 첨부
             </label>
           )}
-          <details ref={ocrPanel} className="purchase-line">
-            <summary className="text-link">OCR 텍스트로 구매 내역 입력</summary>
-            <p>
-              영수증에서 복사한 텍스트를 붙여넣으세요. 초안을 만들면 아래의
-              날짜·금액·품목 입력을 교체합니다. 원문은 브라우저에서만 읽습니다.
-            </p>
-            <Field label="영수증 OCR 텍스트" wide>
-              <textarea
-                maxLength={30000}
-                value={ocrText}
-                onChange={(e) => setOcrText(e.target.value)}
-              />
-            </Field>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={!ocrText.trim()}
-              onClick={applyOcr}
-            >
-              초안 채우기
-            </Button>
-            {ocrError && <p role="alert">{ocrError}</p>}
-          </details>
         </>
       )}
       {draft && (
         <div className="auth-notice" role="status">
-          <strong>OCR 초안 · 품목 {draft.items.length}개</strong>
+          <strong>Gemini 초안 · 품목 {draft.lines.length}개</strong>
           <p>
             구매처 표기: {draft.merchant ?? "미확인"}. 원본과 비교해
-            와인·수량·빈티지와 빈 금액을 확인하세요. 세트는 묶음으로 바꾸고 구성
-            와인을 선택하세요.
+            와인·수량·빈티지·세트와 빈 금액을 확인하세요. 세트 가격은 병별로
+            나누지 않습니다.
           </p>
-          {draft.loosePrices.length > 0 && (
-            <p>
-              품목 연결을 확인할 금액: {draft.loosePrices.map(won).join(", ")}
-            </p>
-          )}
-          {draft.discount === null && (
-            <p>
-              할인 합계를 자동 확인하지 못했습니다. 원본에서 확인해 입력하세요.
-            </p>
-          )}
           {duplicate && (
             <p>
               같은 날짜와 실결제액의 구매가 이미 있습니다.{" "}
@@ -838,6 +956,65 @@ export function ReceiptForm({
           </div>
           {l.wines.map((w, j) => (
             <div key={j}>
+              <div className="form-grid">
+                <Field label="내 컬렉션 와인 연결">
+                  <select
+                    value={w.wine_id ?? ""}
+                    onChange={(e) => {
+                      const chosen = data.wines.find(
+                        (v) => v.id === e.target.value,
+                      );
+                      change(i, {
+                        wines: l.wines.map((x, k) =>
+                          k === j
+                            ? {
+                                ...x,
+                                wine_id: chosen?.id,
+                                wine_name: chosen?.name_ko ?? x.wine_name,
+                                producer: chosen?.producer ?? undefined,
+                                bottlePhoto: undefined,
+                              }
+                            : x,
+                        ),
+                      });
+                    }}
+                  >
+                    <option value="">신규 와인 / 직접 확인</option>
+                    {data.wines.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.name_ko}
+                        {v.producer ? ` · ${v.producer}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="저장할 와인명">
+                  <input
+                    required
+                    maxLength={200}
+                    value={
+                      w.wine_name ??
+                      data.wines.find((v) => v.id === w.wine_id)?.name_ko ??
+                      (l.line_kind === "wine" ? l.raw_label : "")
+                    }
+                    onChange={(e) =>
+                      change(i, {
+                        wines: l.wines.map((x, k) =>
+                          k === j
+                            ? {
+                                ...x,
+                                wine_id: undefined,
+                                wine_name: e.target.value,
+                                producer: undefined,
+                                catalogOriginal: undefined,
+                              }
+                            : x,
+                        ),
+                      })
+                    }
+                  />
+                </Field>
+              </div>
               <CatalogPicker
                 key={l.raw_label}
                 label={l.raw_label}
@@ -1018,10 +1195,15 @@ export function ReceiptForm({
         </Field>
       </div>
       <div className="money-total" role="status">
-        품목 합계 − 할인 = <strong>{won(sum)}</strong>
+        품목 합계 − 할인 = <strong>{won(amountsComplete ? sum : null)}</strong>
         <br />
-        실결제액 차이: <strong>{won(paid === "" ? null : paid - sum)}</strong>
-        {paid !== sum && <p>차액을 수정해야 저장할 수 있습니다.</p>}
+        실결제액 차이:{" "}
+        <strong>{won(amountsComplete ? Number(paid) - sum : null)}</strong>
+        {!amountsComplete ? (
+          <p>미확인 금액을 입력해야 저장할 수 있습니다.</p>
+        ) : (
+          paid !== sum && <p>차액을 수정해야 저장할 수 있습니다.</p>
+        )}
       </div>
       {draft && (
         <label className="filter-check">
@@ -1037,6 +1219,8 @@ export function ReceiptForm({
         <Button
           disabled={
             s.busy ||
+            analysisBusy ||
+            !amountsComplete ||
             paid !== sum ||
             !lines.length ||
             (draft !== null && !reviewed)

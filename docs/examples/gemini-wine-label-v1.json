@@ -1,0 +1,138 @@
+{
+  "schema_version": "1.0",
+  "task": "wine_label",
+  "status": "ok",
+  "wines": [
+    {
+      "candidate_ref": "w1",
+      "identity_confidence": "high",
+      "observed": {
+        "name_ko": "한빛 리저브 소비뇽 블랑",
+        "name_original": "HANBIT RESERVE SAUVIGNON BLANC",
+        "producer": "HANBIT ESTATE",
+        "wine_type": "white",
+        "country": "뉴질랜드",
+        "region": "말보로",
+        "appellation": null,
+        "grapes": [
+          "소비뇽 블랑"
+        ],
+        "vintage_label": "2025",
+        "alcohol_percent": 12.5,
+        "bottle_volume_ml": 750,
+        "label_description": null
+      },
+      "evidence": [
+        {
+          "field_path": "/observed/name_ko",
+          "source": "translation",
+          "image_indexes": [
+            0
+          ],
+          "text": "HANBIT RESERVE SAUVIGNON BLANC"
+        },
+        {
+          "field_path": "/observed/name_original",
+          "source": "image_text",
+          "image_indexes": [
+            0
+          ],
+          "text": "HANBIT RESERVE SAUVIGNON BLANC"
+        },
+        {
+          "field_path": "/observed/producer",
+          "source": "image_text",
+          "image_indexes": [
+            0
+          ],
+          "text": "HANBIT ESTATE"
+        },
+        {
+          "field_path": "/observed/wine_type",
+          "source": "classification",
+          "image_indexes": [
+            1
+          ],
+          "text": "WHITE WINE"
+        },
+        {
+          "field_path": "/observed/country",
+          "source": "translation",
+          "image_indexes": [
+            1
+          ],
+          "text": "PRODUCT OF NEW ZEALAND"
+        },
+        {
+          "field_path": "/observed/region",
+          "source": "translation",
+          "image_indexes": [
+            0
+          ],
+          "text": "MARLBOROUGH"
+        },
+        {
+          "field_path": "/observed/grapes/0",
+          "source": "translation",
+          "image_indexes": [
+            0
+          ],
+          "text": "SAUVIGNON BLANC"
+        },
+        {
+          "field_path": "/observed/vintage_label",
+          "source": "image_text",
+          "image_indexes": [
+            0
+          ],
+          "text": "2025"
+        },
+        {
+          "field_path": "/observed/alcohol_percent",
+          "source": "image_text",
+          "image_indexes": [
+            1
+          ],
+          "text": "12.5% ALC/VOL"
+        },
+        {
+          "field_path": "/observed/bottle_volume_ml",
+          "source": "image_text",
+          "image_indexes": [
+            1
+          ],
+          "text": "750 mL"
+        }
+      ],
+      "suggestions": {
+        "source": "model_knowledge",
+        "producer": null,
+        "wine_type": null,
+        "country": null,
+        "region": null,
+        "grapes": [],
+        "summary_ko": "라벨에 적힌 소비뇽 블랑 품종의 일반적인 스타일 참고입니다. 실제 제품의 맛을 확인한 정보가 아닙니다.",
+        "body": 2,
+        "sweetness": "dry",
+        "acidity": 4,
+        "tannin": null,
+        "aromas": [
+          "감귤류",
+          "허브"
+        ],
+        "food_pairings": [
+          "해산물",
+          "샐러드"
+        ],
+        "serving_temperature_min_c": 8,
+        "serving_temperature_max_c": 10
+      },
+      "review_notes": [
+        "가상 라벨을 전제로 한 JSON 예제입니다. 실제 상품 정보가 아닙니다.",
+        "한글명은 라벨 원어명의 번역 제안이므로 확인해 주세요."
+      ]
+    }
+  ],
+  "receipt": null,
+  "warnings": []
+}
