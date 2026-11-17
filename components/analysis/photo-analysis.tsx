@@ -138,11 +138,21 @@ export function PhotoAnalysis({
         context.fillStyle = "white";
         context.fillRect(rect.x, rect.y, rect.width, rect.height);
       }
-      const blob = await new Promise<Blob | null>((resolve) =>
-        out.toBlob(resolve, "image/webp", 0.9),
+      const encode = (type: string) =>
+        new Promise<Blob | null>((resolve) => out.toBlob(resolve, type, 0.9));
+      let blob = await encode("image/webp");
+      if (!blob || blob.type !== "image/webp")
+        blob = await encode("image/jpeg");
+      if (!blob || !["image/webp", "image/jpeg"].includes(blob.type))
+        throw new Error("IMAGE_ENCODE");
+      const edited = await prepareUpload(
+        new File(
+          [blob],
+          blob.type === "image/webp" ? "analysis.webp" : "analysis.jpg",
+          { type: blob.type },
+        ),
       );
-      if (blob && revision.current === version)
-        replace(new File([blob], "analysis.webp", { type: "image/webp" }));
+      if (revision.current === version) replace(edited);
     } catch {
       if (revision.current === version)
         setMessage("사진을 편집하지 못했습니다. 다시 선택해 주세요.");
@@ -234,7 +244,10 @@ export function PhotoAnalysis({
   }
   const label = task === "receipt" ? "영수증" : "와인 라벨";
   return (
-    <section className="purchase-line photo-analysis" aria-label={`${label} 사진 분석`}>
+    <section
+      className="purchase-line photo-analysis"
+      aria-label={`${label} 사진 분석`}
+    >
       <h3>{label} 사진으로 입력</h3>
       <p>
         JPEG·PNG·WebP, 선택 파일 10MB 이하.{" "}

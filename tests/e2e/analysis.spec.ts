@@ -21,6 +21,18 @@ test("Gemini receipt remains local until consent, preserves bundle/discount and 
   page,
 }, info) => {
   let calls = 0;
+  if (info.project.name === "mobile-390")
+    await page.addInitScript(() => {
+      const encode = HTMLCanvasElement.prototype.toBlob;
+      HTMLCanvasElement.prototype.toBlob = function (callback, type, quality) {
+        encode.call(
+          this,
+          callback,
+          type === "image/webp" ? "image/png" : type,
+          quality,
+        );
+      };
+    });
   await page.route("**/api/analysis/receipt", async (r) => {
     const data = await new Request(r.request().url(), {
       method: "POST",
@@ -28,6 +40,8 @@ test("Gemini receipt remains local until consent, preserves bundle/discount and 
       body: new Uint8Array(r.request().postDataBuffer()!).buffer,
     }).formData();
     const file = data.get("file") as File;
+    if (info.project.name === "mobile-390")
+      expect(file.type).toBe("image/jpeg");
     const pixel = await sharp(Buffer.from(await file.arrayBuffer()))
       .extract({ left: 10, top: 10, width: 1, height: 1 })
       .raw()
@@ -80,9 +94,14 @@ test("Gemini receipt remains local until consent, preserves bundle/discount and 
   await page
     .getByRole("checkbox", { name: "구매 저장 시 이 사진도 비공개로 첨부" })
     .uncheck();
-  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
   await page.screenshot({
-    path: `test-results/gemini-receipt-${info.project.name}.png`,fullPage:true,
+    path: `test-results/gemini-receipt-${info.project.name}.png`,
+    fullPage: true,
   });
   await page.getByRole("button", { name: "구매 저장", exact: true }).click();
   await expect(page).toHaveURL(/\/purchases\/[0-9a-f-]+$/);
@@ -150,9 +169,14 @@ test("wine label fills editable details and saving a photo creates only one wine
   await page
     .getByRole("checkbox", { name: "원본 라벨과 와인 상세를 확인했습니다." })
     .check();
-  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
   await page.screenshot({
-    path: `test-results/gemini-wine-${info.project.name}.png`,fullPage:true,
+    path: `test-results/gemini-wine-${info.project.name}.png`,
+    fullPage: true,
   });
   await page.getByRole("button", { name: "와인 저장", exact: true }).click();
   await expect(
