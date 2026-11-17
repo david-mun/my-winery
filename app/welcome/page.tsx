@@ -1,8 +1,11 @@
+import { hasSupabaseConfiguration } from "@/lib/env";
 import { AuthForm } from "@/components/forms";
 import { supabase } from "@/lib/supabase/server";
 import { checkProof } from "@/lib/auth-proof";
 import { redirect } from "next/navigation";
+export const dynamic = "force-dynamic";
 export default async function Welcome() {
+  if (!hasSupabaseConfiguration()) redirect("/setup");
   const db = await supabase();
   const {
     data: { user },

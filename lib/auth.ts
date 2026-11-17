@@ -1,4 +1,5 @@
 import "server-only";
+import { ServiceConfigurationError } from "./env";
 import { redirect } from "next/navigation";
 import { supabase } from "./supabase/server";
 export class AppError extends Error {
@@ -38,6 +39,7 @@ export async function pageUser(admin = false) {
   try {
     return await requireUser(admin);
   } catch (e) {
+    if (e instanceof ServiceConfigurationError) redirect("/setup");
     if (e instanceof AppError) {
       if (e.status === 401) redirect("/login");
       redirect("/login?notice=" + encodeURIComponent(e.message));

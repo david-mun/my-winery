@@ -11,3 +11,14 @@ export function serverEnv() {
     appUrl: read("NEXT_PUBLIC_APP_URL") ?? "http://localhost:3000",
   };
 }
+
+export function hasSupabaseConfiguration() {
+  const { url, key } = serverEnv();
+  return Boolean(url?.trim() && key?.trim());
+}
+
+export class ServiceConfigurationError extends Error {
+  constructor() {
+    super("SERVICE_NOT_CONFIGURED");
+  }
+}
