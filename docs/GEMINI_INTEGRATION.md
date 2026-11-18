@@ -6,7 +6,7 @@
 
 | 파일 | 책임 |
 |---|---|
-| `lib/analysis/contracts.ts` | 공급자와 무관한 Zod v2 계약/공유 DTO, 라벨에 있는 이름·생산자 조합, 메모 매핑. 키·서버 import 없음 |
+| `lib/analysis/contracts.ts` | 공급자와 무관한 영수증 v3 / 라벨 v2 계약·공유 DTO, 관측 사실과 상품 상세 후보 구분. 키·서버 import 없음 |
 | `lib/analysis/gemini.ts` | 서버 전용 키/모델 설정, 호출용 스키마, 프롬프트, Google REST, 제한 시간·503 1회 재시도. 폼/DB 저장 기능 없음 |
 | `lib/analysis/validation.ts` | 서버 응답 구조/의미 검사, 빈티지·근거 누락 정리, 합계 경고. 공급자/DB/네트워크 의존 없음 |
 | `lib/analysis/handler.ts` | 출처·로그인·활성 계정, 파일 검사/정제, 기존 DB의 공유 rate RPC, no-store와 오류 변환 |
@@ -25,9 +25,22 @@
 
 `POST /api/analysis/receipt`, `POST /api/analysis/wine-label`에 multipart `file` 1개와 `consent=true`를 보낸다. 선택 전 파일은 10MiB/40MP, 서버로 보내는 이미지는 최대 3MiB다. JPEG/PNG/WebP signature와 디코딩을 검사하고 최대 긴 변 2,000px/WebP로 다시 인코딩하여 EXIF를 제거한다. 임의 외부 이미지 URL/타인 Storage 경로는 입력으로 받지 않는다. 여러 라벨을 합친 분석은 등록 대상으로 받지 않고 한 병의 라벨 영역으로 자르도록 안내한다.
 
-응답 형태는 `schema_version: "2.0"`, `task`, `model`, `analysis`, `warnings`다. 실패는 기존 앱과 동일한 `{error: "한국어 안내"}`이며 400/401/403/413/415/422/429/502/503/504를 구별한다. 모든 응답은 `private, no-store`. 공급자 오류 원문·이미지·키·개인 원문을 로그에 출력하지 않는다. 모델은 자동으로 다른 유료 모델로 변경하지 않는다.
+응답은 `task`, `model`, `schema_version`, `analysis`, `warnings`다. 영수증은 `schema_version: "3.0"`, 라벨은 `"2.0"`이다. 실패는 기존 앱과 동일한 `{error: "한국어 안내"}`이며 400/401/403/413/415/422/429/502/503/504를 구별한다. 모든 응답은 `private, no-store`. 공급자 오류 원문·이미지·키·개인 원문을 로그에 출력하지 않는다. 모델은 자동으로 다른 유료 모델로 변경하지 않는다.
 
-v2의 소스는 [공유 계약](../lib/analysis/contracts.ts)이다. 기계 검토용으로 [영수증 스키마](schemas/gemini-receipt-v2.schema.json), [와인 라벨 스키마](schemas/gemini-wine-label-v2.schema.json)를 함께 보관한다. 기존 v1 JSON을 현재 API에 입력하지 않는다.
+현재 소스는 [공유 계약](../lib/analysis/contracts.ts)이다. 기계 검토용으로 [영수증 v3 스키마](schemas/gemini-receipt-v3.schema.json), [와인 라벨 v2 스키마](schemas/gemini-wine-label-v2.schema.json)를 함께 보관한다. 기존 영수증 v2의 `details` 없는 초안은 null로 호환 처리한다. v1 JSON은 현재 API에 입력하지 않는다.
+
+## 영수증 v3 상품 상세 후보 — 2026-11-18
+
+사용자 요청으로 각 `lines[].wines[]`에 nullable `details`를 추가했다. `raw_label`과 `wines.name`은 인쇄 원문을 보존하고, `details`에서만 상품 지식으로 정식명·영문명·원산지 등을 추정한다. 제품을 좁히지 못하면 전체 null, 일부 상세를 모르면 해당 필드 null/빈 배열이다. 웹 검색이나 공식 자료 검증을 수행하지 않으므로 모든 상세는 미검증 후보이며 모델의 `confidence`도 사실성 보증이 아니다.
+
+| 필드 | 의미 |
+|---|---|
+| `name_ko`, `name_en` | 한글 정식명·영문명 후보 |
+| `producer`, `country`, `region`, `grapes` | 생산자·국가·지역·품종 후보 |
+| `alcohol_percent` | `{min,max}` 도수 범위. 단일 값은 min=max, 미확인은 null |
+| `confidence`, `notes` | 모델의 high/medium/low 판단과 모호한 상세 설명 |
+
+사진에 없는 빈티지 연도는 후보 이름에서도 제거한다. 역전된 도수 범위는 null로 정리한다. 후보에는 DB ID·가격·빈티지 필드가 없으며 기존 회계·세트·할인 규칙을 바꾸지 않는다. 구매 폼은 후보 상세를 보여 주고 `후보 와인명 사용`을 눌렀을 때 이름·생산자만 편집값으로 채운다. 원문 수정·수동 이름 편집·다른 컬렉션/카탈로그 선택 시 이전 후보를 지운다. 상세 전체를 저장 RPC에 보내거나 기존 와인 마스터에 자동 덮어쓰지 않는다.
 
 ## v1에서 단순화한 이유
 
@@ -35,7 +48,7 @@ v2의 소스는 [공유 계약](../lib/analysis/contracts.ts)이다. 기계 검�
 
 - 영수증 와인은 줄 내부에 이름·빈티지·수량을 중첩한다. 모델이 DB ID·후보 참조·배분 가격을 반환할 수 없다. 최종 소유자 와인 연결과 세트 배분 NULL은 기존 저장 RPC가 담당한다.
 - 와인 상세는 `name`, `producer`, `wine_type`, `country`, `region`, `grapes`, `vintage_label`, `alcohol_percent`, `bottle_volume_ml`, `label_description`이다. `evidence`는 허용된 필드명과 인쇄 문구이며 임의 Pointer를 사용하지 않는다.
-- 향·타닌·음식/스타일 제안·자동 영문 상품명 보충은 현재 입력 경로에서 요청하지 않는다. 사진의 사실과 상품 추론이 섞이는 것을 줄이기 위한 선택이며, 외부 점수/URL·개인 평점/시음 기록도 반환 대상이 아니다.
+- 향·타닌·음식/스타일 제안·외부 점수/URL·개인 평점/시음 기록은 반환 대상이 아니다. 라벨 v2는 인쇄된 상세만 추출하며, 영수증 v3의 상품 지식 보충은 별도 `details`에서만 허용한다.
 - 문자열 길이·숫자 범위·목록 상한은 호출용 스키마에서 단순화하되, 반환 시 엄격한 Zod 검증을 유지한다. 근거가 없는 와인 상세는 비워 두고 사용자에게 알린다. 2자리 영수증 연도를 4자리 빈티지로 확장하지 않는다. 사진 근거의 진실성은 구조 검사로 보장할 수 없으므로 항상 원본 대조가 필요하다.
 
 ## 화면과 저장

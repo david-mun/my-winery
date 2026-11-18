@@ -2,11 +2,13 @@
 /* Private signed images deliberately bypass the shared Next image optimizer. */
 /* eslint-disable @next/next/no-img-element */
 import { PhotoAnalysis } from "./analysis/photo-analysis";
+import { ReceiptWineSuggestion } from "./analysis/receipt-wine-details";
 import {
   wineDescription,
   wineDisplayName,
   type AnalysisResult,
   type ReceiptAnalysis,
+  type ReceiptWineDetails,
 } from "@/lib/analysis/contracts";
 import { WinePhotoInput, type BottlePhoto } from "./wine-photo-input";
 import { DeletePhoto } from "./delete-photo";
@@ -648,6 +650,7 @@ type EditorLine = Omit<InputLine, "line_amount" | "wines"> & {
     bottle_quantity: number | "";
     bottlePhoto?: BottlePhoto;
     catalogOriginal?: string;
+    analysisDetails?: ReceiptWineDetails | null;
   })[];
 };
 export function ReceiptForm({
@@ -710,6 +713,7 @@ export function ReceiptForm({
             wine_name: matches.length === 1 ? undefined : name,
             vintage_label: w.vintage_label,
             bottle_quantity: w.quantity ?? "",
+            analysisDetails: w.details,
           };
         }),
       })),
@@ -946,6 +950,7 @@ export function ReceiptForm({
                       ...x,
                       bottlePhoto: undefined,
                       catalogOriginal: undefined,
+                      analysisDetails: undefined,
                       wine_name: undefined,
                       producer: undefined,
                     })),
@@ -956,6 +961,42 @@ export function ReceiptForm({
           </div>
           {l.wines.map((w, j) => (
             <div key={j}>
+              {w.analysisDetails && (
+                <ReceiptWineSuggestion
+                  details={w.analysisDetails}
+                  onChoose={() => {
+                    const details = w.analysisDetails!;
+                    const name = details.name_ko ?? details.name_en;
+                    if (!name) return;
+                    const matches = data.wines.filter(
+                      (wine) =>
+                        wine.name_ko === name ||
+                        (details.name_en !== null &&
+                          wine.name_original === details.name_en),
+                    );
+                    change(i, {
+                      wines: l.wines.map((bottle, index) =>
+                        index === j
+                          ? {
+                              ...bottle,
+                              wine_id:
+                                matches.length === 1
+                                  ? matches[0].id
+                                  : undefined,
+                              wine_name: name,
+                              producer:
+                                matches.length === 1
+                                  ? (matches[0].producer ?? undefined)
+                                  : (details.producer ?? undefined),
+                              bottlePhoto: undefined,
+                              catalogOriginal: undefined,
+                            }
+                          : bottle,
+                      ),
+                    });
+                  }}
+                />
+              )}
               <div className="form-grid">
                 <Field label="내 컬렉션 와인 연결">
                   <select
@@ -972,6 +1013,7 @@ export function ReceiptForm({
                                 wine_id: chosen?.id,
                                 wine_name: chosen?.name_ko ?? x.wine_name,
                                 producer: chosen?.producer ?? undefined,
+                                analysisDetails: undefined,
                                 bottlePhoto: undefined,
                               }
                             : x,
@@ -1005,6 +1047,7 @@ export function ReceiptForm({
                                 ...x,
                                 wine_id: undefined,
                                 wine_name: e.target.value,
+                                analysisDetails: undefined,
                                 producer: undefined,
                                 catalogOriginal: undefined,
                               }
@@ -1039,6 +1082,7 @@ export function ReceiptForm({
                                     wine_id: undefined,
                                     bottlePhoto: undefined,
                                     catalogOriginal: c?.original ?? undefined,
+                                    analysisDetails: undefined,
                                     wine_name: c?.name,
                                     producer: c?.producer,
                                   }

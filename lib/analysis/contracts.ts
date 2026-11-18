@@ -44,6 +44,27 @@ export const wineFacts = z
   })
   .strict();
 export type WineFacts = z.infer<typeof wineFacts>;
+// Product-name identification is a model suggestion, separate from printed facts.
+export const receiptWineDetails = z
+  .object({
+    name_ko: text,
+    name_en: text,
+    producer: text,
+    country: text,
+    region: text,
+    grapes: z.array(z.string().min(1).max(100)).max(20),
+    alcohol_percent: z
+      .object({
+        min: z.number().min(0).max(100),
+        max: z.number().min(0).max(100),
+      })
+      .strict()
+      .nullable(),
+    confidence: z.enum(["high", "medium", "low"]),
+    notes: z.string().min(1).max(500).nullable(),
+  })
+  .strict();
+export type ReceiptWineDetails = z.infer<typeof receiptWineDetails>;
 export const wineAnalysisSchema = z
   .object({
     bottle_count: z.number().int().min(0).max(100),
@@ -83,7 +104,12 @@ export const receiptAnalysisSchema = z
             wines: z
               .array(
                 z
-                  .object({ name: text, vintage_label: vintage, quantity })
+                  .object({
+                    name: text,
+                    vintage_label: vintage,
+                    quantity,
+                    details: receiptWineDetails.nullable().default(null),
+                  })
                   .strict(),
               )
               .max(100),

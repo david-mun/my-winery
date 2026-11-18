@@ -1,6 +1,11 @@
 import sharp from "sharp";
 import { test, expect } from "@playwright/test";
-import { receiptFixture, wineFixture } from "../fixtures/analysis";
+import {
+  receiptFixture,
+  wineFixture,
+  receiptDetailsFixture,
+} from "../fixtures/analysis";
+import type { ReceiptInput } from "../../lib/domain";
 
 test.beforeEach(async ({ page }, info) => {
   await page.route("**/api/wine-search", (r) =>
@@ -21,6 +26,16 @@ test("Gemini receipt remains local until consent, preserves bundle/discount and 
   page,
 }, info) => {
   let calls = 0;
+  const receipt = structuredClone(receiptFixture);
+  receipt.lines[1].wines[0].details = structuredClone(receiptDetailsFixture);
+  const submitted: ReceiptInput[] = [];
+  page.on("request", (req) => {
+    if (
+      new URL(req.url()).pathname === "/api/purchases" &&
+      req.method() === "POST"
+    )
+      submitted.push(req.postDataJSON());
+  });
   if (info.project.name === "mobile-390")
     await page.addInitScript(() => {
       const encode = HTMLCanvasElement.prototype.toBlob;
@@ -49,7 +64,7 @@ test("Gemini receipt remains local until consent, preserves bundle/discount and 
     expect([...pixel.subarray(0, 3)]).toEqual([255, 255, 255]);
     calls++;
     return r.fulfill({
-      json: { task: "receipt", analysis: receiptFixture, warnings: [] },
+      json: { task: "receipt", analysis: receipt, warnings: [] },
     });
   });
   await page.goto("/purchases/new");
@@ -87,6 +102,21 @@ test("Gemini receipt remains local until consent, preserves bundle/discount and 
   await expect(page.getByLabel("병 수", { exact: true }).nth(2)).toHaveValue(
     "2",
   );
+  const candidate = page.getByRole("complementary", { name: "AI 와인 후보" });
+  await expect(
+    candidate.getByText("Example Estate Sauvignon Blanc", { exact: true }),
+  ).toBeVisible();
+  await expect(candidate.getByText("12~13%", { exact: true })).toBeVisible();
+  await expect(
+    page.getByLabel("저장할 와인명", { exact: true }).nth(2),
+  ).toHaveValue("가상 와인 C");
+  await candidate.getByRole("button", { name: "후보 와인명 사용" }).click();
+  await expect(
+    page.getByLabel("저장할 와인명", { exact: true }).nth(2),
+  ).toHaveValue("가상 상세 와인 C");
+  await expect(
+    page.getByLabel("영수증 상품명", { exact: true }).nth(1),
+  ).toHaveValue("가상 와인 C 2025");
   await expect(
     page.getByRole("button", { name: "구매 저장", exact: true }),
   ).toBeDisabled();
@@ -106,6 +136,9 @@ test("Gemini receipt remains local until consent, preserves bundle/discount and 
   await page.getByRole("button", { name: "구매 저장", exact: true }).click();
   await expect(page).toHaveURL(/\/purchases\/[0-9a-f-]+$/);
   expect(calls).toBe(1);
+  expect(submitted[0].lines[1].wines[0].wine_name).toBe("가상 상세 와인 C");
+  expect(JSON.stringify(submitted[0])).not.toContain("analysisDetails");
+  expect(JSON.stringify(submitted[0])).not.toContain("alcohol_percent");
   // DB RPC remains responsible for one bundle amount and NULL allocations.
   await expect(
     page.getByText("가격 미확인", { exact: false }).first(),

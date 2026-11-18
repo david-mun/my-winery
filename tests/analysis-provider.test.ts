@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 import { analyzeWithGemini, servingSchema } from "../lib/analysis/gemini";
-import { wineFixture } from "./fixtures/analysis";
+import {
+  wineFixture,
+  receiptFixture,
+  receiptDetailsFixture,
+} from "./fixtures/analysis";
 const response = () =>
   Response.json({
     candidates: [
@@ -56,6 +60,37 @@ it("retries a transient 503 once but never falls back to a paid model", async ()
   );
   expect(f).toHaveBeenCalledTimes(2);
   expect(f.mock.calls[0][0]).toBe(f.mock.calls[1][0]);
+});
+
+it("requests and returns receipt v3 product details while retaining raw labels and prices", async () => {
+  const receipt = structuredClone(receiptFixture);
+  receipt.lines[1].wines[0].details = structuredClone(receiptDetailsFixture);
+  const fetcher = vi.fn().mockResolvedValue(
+    Response.json({
+      candidates: [
+        {
+          finishReason: "STOP",
+          content: { parts: [{ text: JSON.stringify(receipt) }] },
+        },
+      ],
+    }),
+  );
+  vi.stubGlobal("fetch", fetcher);
+  const result = await analyzeWithGemini(
+    "receipt",
+    Buffer.from("fixture"),
+    new AbortController().signal,
+  );
+  expect(result).toMatchObject({
+    schema_version: "3.0",
+    task: "receipt",
+    analysis: receipt,
+  });
+  const body = JSON.parse(fetcher.mock.calls[0][1].body);
+  expect(
+    body.generationConfig.responseJsonSchema.properties.lines.items.properties
+      .wines.items.properties.details,
+  ).toBeDefined();
 });
 it.each([400, 401, 404, 429])(
   "does not repeat HTTP %i or echo upstream credentials",
