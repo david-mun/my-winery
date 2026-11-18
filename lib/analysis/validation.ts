@@ -109,6 +109,37 @@ export function validateAnalysis(
         `${line.raw_label}: 인쇄된 단가·수량·금액이 일치하지 않습니다.`,
       );
     for (const bottle of line.wines) {
+      const details = bottle.details;
+      if (details) {
+        // Unprinted years from product knowledge must not become bottle facts.
+        for (const field of ["name_ko", "name_en"] as const) {
+          const name = details[field];
+          if (name) {
+            details[field] =
+              name
+                .replace(/[12][0-9]{3}/g, (year) =>
+                  line.raw_label.includes(year) ? year : "",
+                )
+                .replace(/\s+/g, " ")
+                .trim() || null;
+            if (details[field] !== name)
+              warnings.push(
+                `${line.raw_label}: 후보 이름에서 미확인 연도를 제외했습니다.`,
+              );
+          }
+        }
+        if (!bottle.name || (!details.name_ko && !details.name_en)) {
+          bottle.details = null;
+        } else {
+          if (
+            details.alcohol_percent &&
+            details.alcohol_percent.min > details.alcohol_percent.max
+          ) {
+            details.alcohol_percent = null;
+            warnings.push(`${line.raw_label}: 도수 범위를 확인해 주세요.`);
+          }
+        }
+      }
       // Two-digit POS suffixes must never become a fabricated vintage.
       if (
         bottle.vintage_label !== "UNKNOWN" &&
@@ -119,6 +150,10 @@ export function validateAnalysis(
       }
     }
   }
+  if (data.lines.some((line) => line.wines.some((wine) => wine.details)))
+    warnings.push(
+      "와인 상세는 상품명으로 추정한 AI 후보입니다. 실제 상품·원산지·품종·도수는 라벨과 대조해 주세요.",
+    );
   if (
     data.lines.some(
       (l) => l.amount === null || l.wines.some((w) => w.quantity === null),

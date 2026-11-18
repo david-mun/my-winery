@@ -1,7 +1,19 @@
 import type {
   ReceiptAnalysis,
   WineAnalysis,
+  ReceiptWineDetails,
 } from "../../lib/analysis/contracts";
+export const receiptDetailsFixture: ReceiptWineDetails = {
+  name_ko: "가상 상세 와인 C",
+  name_en: "Example Estate Sauvignon Blanc",
+  producer: "Example Estate",
+  country: "뉴질랜드",
+  region: "말보로",
+  grapes: ["소비뇽 블랑"],
+  alcohol_percent: { min: 12, max: 13 },
+  confidence: "medium",
+  notes: "상품명으로 추정한 가상 테스트 후보입니다.",
+};
 export const receiptFixture: ReceiptAnalysis = {
   merchant: "가상 와인숍",
   purchased_on: "2026-10-10",
@@ -16,8 +28,18 @@ export const receiptFixture: ReceiptAnalysis = {
       unit_price: 39900,
       amount: 39900,
       wines: [
-        { name: "가상 와인 A", vintage_label: "UNKNOWN", quantity: 1 },
-        { name: "가상 와인 B", vintage_label: "UNKNOWN", quantity: 1 },
+        {
+          name: "가상 와인 A",
+          vintage_label: "UNKNOWN",
+          quantity: 1,
+          details: null,
+        },
+        {
+          name: "가상 와인 B",
+          vintage_label: "UNKNOWN",
+          quantity: 1,
+          details: null,
+        },
       ],
     },
     {
@@ -26,7 +48,14 @@ export const receiptFixture: ReceiptAnalysis = {
       printed_quantity: 2,
       unit_price: 10000,
       amount: 20000,
-      wines: [{ name: "가상 와인 C", vintage_label: "2025", quantity: 2 }],
+      wines: [
+        {
+          name: "가상 와인 C",
+          vintage_label: "2025",
+          quantity: 2,
+          details: null,
+        },
+      ],
     },
   ],
   warnings: [],

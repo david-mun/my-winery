@@ -1,7 +1,8 @@
 # Photo analysis module
 
-`contracts.ts` contains provider-independent, browser-safe v2 DTOs and Zod schemas.
-`validation.ts` checks and cleans observed facts without network or database calls.
+`contracts.ts` contains provider-independent, browser-safe receipt v3 / label v2 DTOs and Zod schemas.
+Receipt `wines.details` contains unverified product-knowledge suggestions, separate from printed names.
+`validation.ts` checks and cleans observed facts and suggestions without network or database calls.
 `gemini.ts` is the server-only provider adapter; it owns credentials, schema projection,
 prompting, request timeouts and response handling.
 `handler.ts` enforces session/origin/image/quota boundaries before invoking a provider.

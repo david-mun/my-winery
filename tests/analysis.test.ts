@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { validateAnalysis } from "../lib/analysis/validation";
-import { receiptFixture, wineFixture } from "./fixtures/analysis";
+import {
+  receiptFixture,
+  wineFixture,
+  receiptDetailsFixture,
+} from "./fixtures/analysis";
 import { wineDisplayName } from "../lib/analysis/contracts";
 import { receiptInput } from "../lib/domain";
 
@@ -104,6 +108,66 @@ describe("provider-independent photo analysis validation", () => {
       wine: { vintage_label: "NV" },
     });
   });
+});
+
+it("keeps product suggestions separate from printed names, vintage and bundle accounting", () => {
+  const r = structuredClone(receiptFixture);
+  r.lines[0].wines[0].details = structuredClone(receiptDetailsFixture);
+  const result = validateAnalysis("receipt", r);
+  if (result.task !== "receipt") throw Error();
+  expect(result.analysis.lines[0]).toMatchObject({
+    raw_label: receiptFixture.lines[0].raw_label,
+    amount: 39900,
+    wines: [
+      {
+        name: "가상 와인 A",
+        vintage_label: "UNKNOWN",
+        details: receiptDetailsFixture,
+      },
+      { details: null },
+    ],
+  });
+  expect(result.analysis.discount_amount).toBe(18000);
+  expect(result.warnings.some((w) => w.includes("AI 후보"))).toBe(true);
+});
+
+it("removes invented vintage years from suggested names and invalid alcohol ranges", () => {
+  const r = structuredClone(receiptFixture);
+  r.lines[0].wines[0].details = {
+    ...receiptDetailsFixture,
+    name_ko: "가상 와인 2022",
+    name_en: "Example Blanc 2022",
+    alcohol_percent: { min: 14, max: 12 },
+  };
+  const result = validateAnalysis("receipt", r);
+  if (result.task !== "receipt") throw Error();
+  expect(result.analysis.lines[0].wines[0]).toMatchObject({
+    vintage_label: "UNKNOWN",
+    details: {
+      name_ko: "가상 와인",
+      name_en: "Example Blanc",
+      alcohol_percent: null,
+    },
+  });
+});
+
+it("accepts earlier drafts without details but rejects model-supplied IDs and invalid alcohol", () => {
+  const r = structuredClone(receiptFixture);
+  const old = JSON.parse(JSON.stringify(r));
+  delete old.lines[0].wines[0].details;
+  const compatible = validateAnalysis("receipt", old);
+  if (compatible.task !== "receipt") throw Error();
+  expect(compatible.analysis.lines[0].wines[0].details).toBeNull();
+  r.lines[0].wines[0].details = {
+    ...receiptDetailsFixture,
+    wine_id: "attacker",
+  } as typeof receiptDetailsFixture;
+  expect(() => validateAnalysis("receipt", r)).toThrow();
+  r.lines[0].wines[0].details = {
+    ...receiptDetailsFixture,
+    alcohol_percent: { min: -1, max: 101 },
+  };
+  expect(() => validateAnalysis("receipt", r)).toThrow();
 });
 
 it("combines a printed producer with a generic varietal without duplicating an existing prefix", () => {
