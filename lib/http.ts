@@ -1,4 +1,4 @@
-import { serverEnv } from "@/lib/env";
+import { serverEnv, ServiceConfigurationError } from "@/lib/env";
 import "server-only";
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
@@ -14,6 +14,14 @@ export function assertOrigin(req: Request) {
     throw new AppError(403, "요청 출처가 올바르지 않습니다.");
 }
 export function fail(error: unknown) {
+  if (error instanceof ServiceConfigurationError)
+    return NextResponse.json(
+      {
+        error:
+          "서비스 연결 설정이 완료되지 않았습니다. 관리자에게 이 배포의 설정을 요청해 주세요.",
+      },
+      { status: 503, headers: { "Cache-Control": "private, no-store" } },
+    );
   if (error instanceof Error && error.message === "BODY_TOO_LARGE")
     return NextResponse.json(
       { error: "사진 또는 입력 내용의 크기를 줄여 주세요." },

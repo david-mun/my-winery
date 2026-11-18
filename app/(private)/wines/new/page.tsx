@@ -1,5 +1,9 @@
 import { WineForm } from "@/components/forms";
-export default function NewWine() {
+import { pageUser } from "@/lib/auth";
+import { collection } from "@/lib/data";
+export default async function NewWine() {
+  const { db } = await pageUser();
+  const data = await collection(db);
   return (
     <>
       <div className="page-heading">
@@ -12,7 +16,7 @@ export default function NewWine() {
         </div>
       </div>
       <section className="panel">
-        <WineForm />
+        <WineForm existingWines={data.wines} />
       </section>
     </>
   );

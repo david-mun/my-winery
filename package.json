@@ -14,8 +14,6 @@
     "import:snapshot": "node --import tsx scripts/import-snapshot.ts",
     "format": "prettier --write app components lib scripts tests *.ts *.mjs",
     "bootstrap:admin": "node --import tsx scripts/bootstrap-admin.ts",
-    "predev": "node tooling/prepare-ocr.mjs",
-    "prebuild": "node tooling/prepare-ocr.mjs",
     "db:migrate": "node tooling/migrate-db.mjs",
     "test:postgres": "node tooling/test-postgres.mjs",
     "owner:setup": "node --import tsx scripts/commission-owner.ts"
@@ -27,8 +25,6 @@
     "@radix-ui/react-slot": "^1.5.0",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.118.0",
-    "@tesseract.js-data/eng": "^1.0.0",
-    "@tesseract.js-data/kor": "^1.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "csv-parse": "^7.0.3",
@@ -40,7 +36,6 @@
     "server-only": "^0.0.1",
     "sharp": "^0.35.5",
     "tailwind-merge": "^3.7.0",
-    "tesseract.js": "^7.0.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {

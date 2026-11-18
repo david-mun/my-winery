@@ -1,0 +1,211 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "My Wine List Gemini analysis v1 (design contract)",
+  "description": "Model-generated analysis only. Server metadata, authorization and reconciliation are outside this schema. All results require user review.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "task", "status", "wines", "receipt", "warnings"],
+  "properties": {
+    "schema_version": { "type": "string", "enum": ["1.0"] },
+    "task": { "type": "string", "enum": ["receipt", "wine_label"] },
+    "status": { "type": "string", "enum": ["ok", "partial", "unreadable", "unsupported"] },
+    "wines": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "#/definitions/wine" }
+    },
+    "receipt": {
+      "anyOf": [{ "$ref": "#/definitions/receipt" }, { "type": "null" }]
+    },
+    "warnings": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "path", "message"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": ["UNREADABLE_TEXT", "AMBIGUOUS_IDENTITY", "MISSING_VALUE", "CONFLICTING_VALUES", "UNSUPPORTED_ITEM", "MULTIPLE_TARGETS", "UNSUPPORTED_CURRENCY"]
+          },
+          "path": { "type": "string", "maxLength": 300, "pattern": "^/" },
+          "message": { "type": "string", "minLength": 1, "maxLength": 500 }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "text": { "type": ["string", "null"], "minLength": 1, "maxLength": 200 },
+    "money": { "type": ["integer", "null"], "minimum": 0, "maximum": 1000000000 },
+    "quantity": { "type": ["integer", "null"], "minimum": 1, "maximum": 10000 },
+    "wineType": {
+      "type": ["string", "null"],
+      "enum": ["red", "white", "sparkling", "rose", "dessert", "fortified", "other", null]
+    },
+    "grapes": {
+      "type": "array",
+      "maxItems": 20,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 100 }
+    },
+    "confidence": { "type": "string", "enum": ["high", "medium", "low"] },
+    "scale": { "type": ["integer", "null"], "minimum": 1, "maximum": 5 },
+    "evidence": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["field_path", "source", "image_indexes", "text"],
+        "properties": {
+          "field_path": {
+            "type": "string",
+            "pattern": "^/",
+            "maxLength": 300,
+            "description": "JSON Pointer relative to the containing wine, receipt or line object. Must address an observed value."
+          },
+          "source": { "type": "string", "enum": ["image_text", "translation", "classification"] },
+          "image_indexes": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2,
+            "uniqueItems": true,
+            "items": { "type": "integer", "minimum": 0, "maximum": 1 }
+          },
+          "text": { "type": "string", "minLength": 1, "maxLength": 500 }
+        }
+      }
+    },
+    "wine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate_ref", "identity_confidence", "observed", "evidence", "suggestions", "review_notes"],
+      "properties": {
+        "candidate_ref": { "type": "string", "pattern": "^w[1-9][0-9]*$", "maxLength": 10 },
+        "identity_confidence": { "$ref": "#/definitions/confidence" },
+        "observed": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name_ko", "name_original", "producer", "wine_type", "country", "region", "appellation", "grapes", "vintage_label", "alcohol_percent", "bottle_volume_ml", "label_description"],
+          "properties": {
+            "name_ko": { "$ref": "#/definitions/text" },
+            "name_original": { "$ref": "#/definitions/text" },
+            "producer": { "$ref": "#/definitions/text" },
+            "wine_type": { "$ref": "#/definitions/wineType" },
+            "country": { "$ref": "#/definitions/text" },
+            "region": { "$ref": "#/definitions/text" },
+            "appellation": { "$ref": "#/definitions/text" },
+            "grapes": { "$ref": "#/definitions/grapes" },
+            "vintage_label": { "type": "string", "pattern": "^(NV|UNKNOWN|[12][0-9]{3})$" },
+            "alcohol_percent": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+            "bottle_volume_ml": { "type": ["integer", "null"], "minimum": 1, "maximum": 30000 },
+            "label_description": { "type": ["string", "null"], "minLength": 1, "maxLength": 1000 }
+          }
+        },
+        "evidence": { "$ref": "#/definitions/evidence" },
+        "suggestions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "producer", "wine_type", "country", "region", "grapes", "summary_ko", "body", "sweetness", "acidity", "tannin", "aromas", "food_pairings", "serving_temperature_min_c", "serving_temperature_max_c"],
+          "properties": {
+            "source": { "type": "string", "enum": ["model_knowledge"] },
+            "producer": { "$ref": "#/definitions/text" },
+            "wine_type": { "$ref": "#/definitions/wineType" },
+            "country": { "$ref": "#/definitions/text" },
+            "region": { "$ref": "#/definitions/text" },
+            "grapes": { "$ref": "#/definitions/grapes" },
+            "summary_ko": { "type": ["string", "null"], "minLength": 1, "maxLength": 1000 },
+            "body": { "$ref": "#/definitions/scale" },
+            "sweetness": { "type": ["string", "null"], "enum": ["dry", "off_dry", "medium", "sweet", null] },
+            "acidity": { "$ref": "#/definitions/scale" },
+            "tannin": { "$ref": "#/definitions/scale" },
+            "aromas": {
+              "type": "array",
+              "maxItems": 10,
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1, "maxLength": 100 }
+            },
+            "food_pairings": {
+              "type": "array",
+              "maxItems": 10,
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1, "maxLength": 100 }
+            },
+            "serving_temperature_min_c": { "type": ["number", "null"], "minimum": 0, "maximum": 30 },
+            "serving_temperature_max_c": { "type": ["number", "null"], "minimum": 0, "maximum": 30 }
+          }
+        },
+        "review_notes": {
+          "type": "array",
+          "maxItems": 20,
+          "items": { "type": "string", "minLength": 1, "maxLength": 500 }
+        }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["merchant_name", "purchased_on", "currency", "gross_amount", "discount_amount", "paid_amount", "discounts", "lines", "evidence"],
+      "properties": {
+        "merchant_name": { "$ref": "#/definitions/text" },
+        "purchased_on": { "type": ["string", "null"], "format": "date" },
+        "currency": { "type": "string", "enum": ["KRW", "OTHER", "UNKNOWN"] },
+        "gross_amount": { "$ref": "#/definitions/money" },
+        "discount_amount": { "$ref": "#/definitions/money" },
+        "paid_amount": { "$ref": "#/definitions/money" },
+        "discounts": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["raw_label", "amount"],
+            "properties": {
+              "raw_label": { "type": "string", "minLength": 1, "maxLength": 300 },
+              "amount": { "type": ["integer", "null"], "minimum": 1, "maximum": 1000000000 }
+            }
+          }
+        },
+        "lines": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["line_ref", "line_kind", "raw_label", "printed_quantity", "printed_unit_price", "line_amount", "wines", "evidence"],
+            "properties": {
+              "line_ref": { "type": "string", "pattern": "^l[1-9][0-9]*$", "maxLength": 10 },
+              "line_kind": { "type": "string", "enum": ["wine", "bundle", "other", "unknown"] },
+              "raw_label": { "type": "string", "minLength": 1, "maxLength": 300 },
+              "printed_quantity": { "$ref": "#/definitions/quantity" },
+              "printed_unit_price": { "$ref": "#/definitions/money" },
+              "line_amount": { "$ref": "#/definitions/money" },
+              "wines": {
+                "type": "array",
+                "maxItems": 100,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["candidate_ref", "bottle_quantity", "allocated_amount"],
+                  "properties": {
+                    "candidate_ref": { "type": "string", "pattern": "^w[1-9][0-9]*$", "maxLength": 10 },
+                    "bottle_quantity": { "$ref": "#/definitions/quantity" },
+                    "allocated_amount": {
+                      "type": ["integer", "null"],
+                      "minimum": 0,
+                      "maximum": 1000000000,
+                      "description": "Total for this wine link, not per-bottle price. Always null for bundles. Never subtract receipt discounts here."
+                    }
+                  }
+                }
+              },
+              "evidence": { "$ref": "#/definitions/evidence" }
+            }
+          }
+        },
+        "evidence": { "$ref": "#/definitions/evidence" }
+      }
+    }
+  }
+}

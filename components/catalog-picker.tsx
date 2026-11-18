@@ -2,7 +2,7 @@
 import { useState, useEffect, useEffectEvent } from "react";
 import type { CatalogWine, CatalogResult } from "@/lib/wine-catalog";
 import { Button } from "./ui/button";
-// Keep OCR batches below the proxy’s concurrent-request limit. Cancelled jobs
+// Keep product search batches below the proxy’s concurrent-request limit. Cancelled jobs
 // check their signal before starting, even if they were waiting for a slot.
 const queue: (() => Promise<void>)[] = [];
 let running = 0;

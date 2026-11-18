@@ -1,5 +1,7 @@
 # 구현 계획·인수 테스트·운영 준비
 
+> 2026-11-17 사진 입력 확장은 [Gemini v2](GEMINI_INTEGRATION.md)로 구현했다. 기기 OCR을 제거하고 관측 사실 추출을 우선한다. 기존 v1의 제안 정보·구매 상세 RPC 확장은 적용하지 않았다.
+
 이 문서는 2026-10-25 수립한 구현·인수 계획이다. 2026-11-03 로컬 MVP와 자동 테스트를 구현했다. 아래 표는 인수 목표이며 전 항목 통과를 의미하지 않는다. 실제 완료 범위는 [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md), 실행 결과와 원격 검수 대기는 [TEST_REPORT.md](TEST_REPORT.md)를 기준으로 한다.
 
 ## 1. 수직 슬라이스와 완료 조건
@@ -15,6 +17,7 @@
 | S6 이관 | dry-run/apply/verify, 안정 원본 키·매핑 | 두 번 실행 같은 결과, 변경 원본 충돌·rollback 확인 |
 | S7 PWA/반응형 | manifest·아이콘, 에러·빈 화면, 모바일 조작 | 360/390/768/1440px smoke, 실제 기기 설치 확인 |
 | S8 인수 | 환경 가이드, CI, 결과 기록 | 필수 검증 통과·미검증 명시 후 승인된 배포만 수행 |
+| S9 사진 입력 확장(설계 2026-11-15) | Gemini 영수증·앞뒤 라벨 분석, 와인 상세 JSON 계약·초안 검수, 신규 와인 상세/구매 원자 저장 RPC 확장, 기기 OCR/직접 입력 유지 | [사진 분석 인수 조건](GEMINI_PHOTO_ANALYSIS.md#7-구현-인수-조건) 통과, 실제 선택 모델/이미지 호출 확인. 현재 앱 연동 미구현 |
 
 도메인 단위 테스트는 각 단계에서 작성한다. 끝에 몰아서 보안을 검증하지 않는다. 키 없이 쓰는 demo는 가상 데이터로 별도 표시하고 실제 개인 CSV를 공개 번들·빌드 프리렌더·배포 seed에 포함하지 않는다. 데모 성공은 실제 DB 연동 성공이 아니다.
 
@@ -44,6 +47,11 @@
 | FILE-03 | 다른 사용자·disabled 사용자 읽기 | 신규 서명 거부, 발급 URL 만료 확인 / 통합 |
 | PWA-01 | 360/390/768/1440px, 키보드·iOS/Android 홈 실행 | overflow 없음, 44px 터치, 포커스·safe area·아이콘 정상 / E2E·실기기 |
 | CACHE-01 | A 로그아웃 후 B 로그인·오프라인 이동 | A의 페이지·API·사진이 B에게 재노출되지 않음 / 통합·E2E |
+| AI-01 | 영수증·앞뒤 라벨 정상/부분/잘린 JSON/예상 밖 키·참조 | JSON 스키마+의미 검증, 근거·AI 제안 구분, 저장 자동 실행 없음 / 계약·단위 |
+| AI-02 | 세트 39,900원·할인 18,000원·미확인 값·합계 불일치 | 세트 한 번·배분 NULL, 전체 할인 한 번, NULL을 0 취급하지 않음·오류 저장 차단 / 단위·DB |
+| AI-03 | anon/disabled/타인 미디어·가리기 전 이미지·한도 초과 | 공급자 호출 전 거부, 가린 결과만 전송, 서버 사용량 제한·no-store·키/개인정보 로그 없음 / 통합 |
+| AI-04 | 사진 교체/취소/재분석·기존 와인 선택·공급자 장애 | 수정값 보존·늦은 응답 무시, 기존 카드 재사용, 수동/OCR 대체, 구매 저장 후 첨부 실패에도 구매 중복 없음 / E2E |
+| AI-05 | 실제 키·선택 모델·비개인 테스트 이미지 | 양쪽 작업의 스키마 수용·시간/토큰/호스팅 크기 확인. mock 성공과 구분 / 외부 통합 |
 
 거부 테스트는 단순 HTTP 200 여부가 아니라 결과 행과 저장 상태를 검증한다(RLS SELECT는 빈 결과일 수 있음). DB 테스트는 service client만으로 실행하지 말고 실제 anon/authenticated 역할과 각 사용자 JWT 맥락으로 수행한다. 관리 secret는 테스트 준비에만 제한한다.
 
@@ -63,6 +71,7 @@ python3 data/validate_snapshot.py
 | 로컬 | Node/npm 지원 버전·lockfile, Supabase CLI/로컬 DB 실행 환경 |
 | 공개 환경변수 | NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, NEXT_PUBLIC_APP_URL |
 | 서버 전용 | SUPABASE_SECRET_KEY; 실제 값은 로컬/배포 secret에만 등록 |
+| Gemini 후속 설정(미구현) | GEMINI_API_KEY, GEMINI_MODEL, GEMINI_ANALYSIS_ENABLED, GEMINI_DATA_MODE; 실제 모델 접근/요금 모드/프로젝트 한도 확인. 키 없는 기존 앱 동작 유지 |
 | Auth | 공개 signup 차단, 정확한 callback/redirect URL, SMTP·이메일 전달 검증 |
 | 최초 관리자 | 승인 후 Auth 계정 생성, UUID 확인, 제한된 bootstrap 실행 |
 | 환경 분리 | Preview/개발 DB와 운영 DB 분리, 잘못된 프로젝트 쓰기 방지 |

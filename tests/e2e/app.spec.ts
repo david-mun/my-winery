@@ -100,6 +100,8 @@ test("receipt editor rejects mismatch, keeps bundles unallocated and validates l
   await expect(
     page.getByText("세트 총액만 기록합니다.", { exact: false }),
   ).toBeVisible();
+  await page.getByLabel("저장할 와인명", {exact:true}).nth(0).fill("세트 와인 A");
+  await page.getByLabel("저장할 와인명", {exact:true}).nth(1).fill("세트 와인 B");
   await page.getByLabel("실결제액", { exact: true }).fill("39900");
   await page.getByRole("button", { name: "입력 검증" }).click();
   await expect(
@@ -139,6 +141,7 @@ test("authenticated owner can create wine, receipt, note, edit and delete withou
     .getByLabel("와인 이름 *", { exact: true })
     .fill("테스트 셀러 " + info.project.name);
   await page.getByLabel("국가", { exact: true }).fill("프랑스");
+  await page.getByLabel("종류", {exact:true}).selectOption("white");
   await page.getByRole("button", { name: "와인 저장", exact: true }).click();
   await expect(page).toHaveURL(/\/wines\/[0-9a-f-]+$/);
   const wineUrl = page.url();
@@ -274,22 +277,10 @@ test("admin invitation, acceptance and account deactivation are enforced", async
   await context.close();
 });
 
-test("pasted OCR text creates a reviewable, unsaved receipt draft", async ({page})=>{
+test("public demo keeps manual input without exposing paid image analysis",async({page})=>{
   await page.goto("/demo?view=purchases");
-  await page.getByText("OCR 텍스트로 구매 내역 입력", {exact:true}).click();
-  await page.getByLabel("영수증 OCR 텍스트").fill(["예시마트","품명","001 테스트 와인","100001","12,000","2","24,000","002 쿠폰","1,000","-1","-1,000","합계액: 23,000","[승인일자]20261010"].join("\n"));
-  await page.getByRole("button",{name:"초안 채우기"}).click();
-  await expect(page.getByText("검색 결과가 없습니다.",{exact:false})).toBeVisible();
-  await expect(page.getByLabel("구매일 *")).toHaveValue("2026-10-10");
-  await expect(page.getByLabel("품목 1 금액")).toHaveValue("24000");
-  await expect(page.getByLabel("영수증 할인",{exact:true})).toHaveValue("1000");
-  await expect(page.getByLabel("실결제액",{exact:true})).toHaveValue("23000");
-  await expect(page.getByLabel("영수증 OCR 텍스트")).toHaveValue("");
-  await expect(page.getByText("저장할 와인명:").locator("..")).toContainText("테스트 와인");
-  await expect(page.getByRole("button",{name:"입력 검증"})).toBeDisabled();
-  await page.getByRole("checkbox",{name:/원본 영수증/}).check();
-  await page.getByRole("button",{name:"입력 검증"}).click();
-  await expect(page.getByText("금액 검증 통과 · 데모에서는 저장하지 않습니다.")).toBeVisible();
+  await expect(page.getByText("사진 분석은 로그인 후 사용할 수 있습니다.",{exact:false})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Gemini로 분석"})).toHaveCount(0);
 });
 
 test("public wine search offers candidates and preserves the receipt label when skipped or reset",async({page})=>{
@@ -309,23 +300,6 @@ test("public wine search offers candidates and preserves the receipt label when 
   await expect(label).toHaveValue("예시 상품명");
   await page.getByRole("button",{name:"영수증 상품명 그대로 사용"}).click();
   await expect(name).toContainText("예시 상품명");
-});
-
-test("reads a selected receipt photograph locally into editable OCR text",async({page},info)=>{
-  test.skip(info.project.name!=="desktop" && info.project.name!=="mobile-390","Real OCR on desktop and mobile layout");
-  test.setTimeout(60000);
-  await page.goto("/demo?view=purchases");
-  const png=await page.evaluate(()=>{
-    const c=document.createElement("canvas");c.width=1100;c.height=530;
-    const ctx=c.getContext("2d")!;ctx.fillStyle="white";ctx.fillRect(0,0,c.width,c.height);
-    ctx.fillStyle="black";ctx.font="34px sans-serif";
-    ["SAMPLE WINE MARKET","품명 단가 수량 금액","001 SAMPLE WINE 12000 1 12000","합계액: 12000"].forEach((line,i)=>ctx.fillText(line,50,80+80*i));
-    return c.toDataURL("image/png").split(",")[1];
-  });
-  await page.getByLabel("사진 선택",{exact:true}).setInputFiles({name:"fictional-receipt.png",mimeType:"image/png",buffer:Buffer.from(png,"base64")});
-  await expect(page.getByLabel("영수증 OCR 텍스트")).toHaveValue(/SAMPLE/i,{timeout:45000});
-  await expect(page.getByRole("button",{name:"초안 채우기"})).toBeEnabled();
-  await expect(page.getByAltText("선택한 영수증 미리보기")).toBeVisible();
 });
 
 test("offers licensed bottle images for the selected wine and lets the owner replace one with a camera file",async({page})=>{

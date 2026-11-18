@@ -1,4 +1,4 @@
-import { serverEnv } from "@/lib/env";
+import { serverEnv, hasSupabaseConfiguration } from "@/lib/env";
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase/server";
 import { setProof } from "@/lib/auth-proof";
@@ -6,6 +6,10 @@ import { safeNext } from "@/lib/security";
 export async function GET(req: Request) {
   const url = new URL(req.url),
     base = serverEnv().appUrl ?? url.origin;
+  if (!hasSupabaseConfiguration())
+    return NextResponse.redirect(new URL("/setup", url.origin), {
+      headers: { "Cache-Control": "private, no-store" },
+    });
   const db = await supabase(),
     type = url.searchParams.get("type"),
     hash = url.searchParams.get("token_hash"),
