@@ -139,10 +139,33 @@ test("Gemini receipt remains local until consent, preserves bundle/discount and 
   expect(submitted[0].lines[1].wines[0].wine_name).toBe("가상 상세 와인 C");
   expect(JSON.stringify(submitted[0])).not.toContain("analysisDetails");
   expect(JSON.stringify(submitted[0])).not.toContain("alcohol_percent");
+  expect(submitted[0].lines[1].wines[0].description).toBe(
+    receiptDetailsFixture.summary_ko,
+  );
+  expect(submitted[0].lines[1].wines[0].name_original).toBe(
+    receiptDetailsFixture.name_en,
+  );
   // DB RPC remains responsible for one bundle amount and NULL allocations.
   await expect(
     page.getByText("가격 미확인", { exact: false }).first(),
   ).toBeVisible();
+  await expect(page.locator('[name="vintage_label"]')).toHaveCount(0);
+  await page
+    .getByRole("link", { name: "가상 상세 와인 C", exact: true })
+    .click();
+  await expect(
+    page
+      .locator(".detail-hero .subtitle")
+      .filter({ hasText: receiptDetailsFixture.summary_ko! }),
+  ).toBeVisible();
+  await expect(page.getByLabel(/빈티지/)).toHaveCount(0);
+  await page.goto("/wines");
+  const card = page
+    .locator(".wine-card")
+    .filter({ hasText: "가상 상세 와인 C" });
+  await expect(card.locator("h2 + .wine-original")).toHaveText(
+    receiptDetailsFixture.name_en!,
+  );
 });
 
 test("wine label fills editable details and saving a photo creates only one wine", async ({
@@ -193,8 +216,8 @@ test("wine label fills editable details and saving a photo creates only one wine
   await expect(page.getByLabel("와인 이름 *", { exact: true })).toHaveValue(
     `Photo Blanc ${info.project.name}`,
   );
-  await expect(page.getByLabel("메모", { exact: true })).toHaveValue(
-    "사진 빈티지: 2025",
+  await expect(page.getByLabel("와인 설명", { exact: true })).toHaveValue(
+    wineFixture.wine!.summary_ko!,
   );
   await expect(
     page.getByRole("button", { name: "와인 저장", exact: true }),
@@ -290,4 +313,108 @@ test("cancellation ignores late results and failures preserve manual input", asy
     headers: { Origin: "https://evil.test" },
   });
   expect(denial.status()).toBe(403);
+});
+
+test("vintage controls stay hidden while existing metadata survives edits and new purchases omit vintage", async ({
+  page,
+}, info) => {
+  const headers = { Origin: "http://127.0.0.1:3100" };
+  const created = await page.request.post("/api/wines", {
+    headers,
+    data: {
+      name_ko: `선택 정보 테스트 ${info.project.name}`,
+      name_original: "Example Estate Blanc",
+      producer: null,
+      wine_type: "white",
+      grape: "샤르도네",
+      country: "프랑스",
+      region: null,
+      description: "기존 와인 설명\n사진 빈티지: 2022",
+    },
+  });
+  expect(created.status()).toBe(200);
+  const { id } = await created.json();
+  const review = await page.request.post("/api/reviews", {
+    headers,
+    data: {
+      wine_id: id,
+      vintage_label: "2022",
+      my_rating: 4,
+      review_text: "기존 개인 노트",
+      tasted_on: null,
+    },
+  });
+  expect(review.status()).toBe(200);
+  const purchase = await page.request.post("/api/purchases", {
+    headers,
+    data: {
+      merchant_id: null,
+      purchased_on: "2026-10-10",
+      paid_amount: 10000,
+      discount_amount: 0,
+      notes: null,
+      lines: [
+        {
+          line_kind: "wine",
+          raw_label: "테스트",
+          line_amount: 10000,
+          wines: [{ wine_id: id, bottle_quantity: 1 }],
+        },
+      ],
+    },
+  });
+  expect(purchase.status()).toBe(200);
+  await page.goto(`/wines/${id}`);
+  await expect(page.getByLabel(/빈티지/)).toHaveCount(0);
+  expect(await page.evaluate(() => document.body.innerText)).not.toContain(
+    "빈티지",
+  );
+  await page.getByText("노트 수정", { exact: true }).click();
+  await page
+    .getByLabel("후기", { exact: true })
+    .first()
+    .fill("수정한 개인 노트");
+  const [noteRequest] = await Promise.all([
+    page.waitForRequest(
+      (req) =>
+        req.method() === "PATCH" &&
+        new URL(req.url()).pathname.startsWith("/api/reviews/"),
+    ),
+    page
+      .getByRole("button", { name: "시음 노트 저장", exact: true })
+      .first()
+      .click(),
+  ]);
+  expect(noteRequest.postDataJSON().vintage_label).toBe("2022");
+  await expect(
+    page.getByText("시음 노트를 저장했습니다.", { exact: true }),
+  ).toBeVisible();
+  await page.getByText("와인 정보 수정", { exact: true }).click();
+  await expect(page.getByLabel("와인 설명", { exact: true })).toHaveValue(
+    "기존 와인 설명",
+  );
+  await page.getByLabel("와인 설명", { exact: true }).fill("수정한 와인 설명");
+  const [wineRequest] = await Promise.all([
+    page.waitForRequest(
+      (req) =>
+        req.method() === "PATCH" &&
+        new URL(req.url()).pathname === `/api/wines/${id}`,
+    ),
+    page.getByRole("button", { name: "와인 저장", exact: true }).click(),
+  ]);
+  expect(wineRequest.postDataJSON().description).toBe(
+    "수정한 와인 설명\n사진 빈티지: 2022",
+  );
+  await expect(
+    page
+      .locator(".detail-hero .subtitle")
+      .filter({ hasText: "수정한 와인 설명" }),
+  ).toBeVisible();
+  expect(await page.evaluate(() => document.body.innerText)).not.toContain(
+    "빈티지",
+  );
+  await page.screenshot({
+    path: `test-results/no-vintage-${info.project.name}.png`,
+    fullPage: true,
+  });
 });

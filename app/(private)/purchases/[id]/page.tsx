@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { pageUser } from "@/lib/auth";
 import { DeletePhoto } from "@/components/delete-photo";
 import { collection } from "@/lib/data";
-import { won, vintageLabel } from "@/lib/domain";
+import { won } from "@/lib/domain";
 import { ReceiptForm, DeleteButton, MediaForm } from "@/components/forms";
 export default async function Receipt({
   params,
@@ -90,7 +90,7 @@ export default async function Receipt({
                     <Link className="text-link" href={"/wines/" + x.wine_id}>
                       {data.wines.find((w) => w.id === x.wine_id)?.name_ko}
                     </Link>{" "}
-                    · {vintageLabel(x.vintage_label)} · {x.bottle_quantity}병
+                    · {x.bottle_quantity}병
                     {x.allocated_amount === null ? " · 병별 가격 미확인" : ""}
                   </div>
                 ))}

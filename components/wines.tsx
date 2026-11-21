@@ -1,6 +1,7 @@
 /* Private images must bypass a shared image optimizer/cache. */
 /* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
+import { visibleDescription } from "@/lib/wine-description";
 import {
   Wine as WineIcon,
   Plus,
@@ -14,8 +15,8 @@ import {
   ratingMinimum,
   wineSummary,
   wineTypes,
+  grapeNames,
   won,
-  vintageLabel,
   type Collection,
   type Filters,
   type Wine,
@@ -42,10 +43,20 @@ export function Bottle({ type = "white" }: { type?: string }) {
     </div>
   );
 }
-function WineCover({ wine, assets }: { wine: Wine; assets: Collection["assets"] }) {
+function WineCover({
+  wine,
+  assets,
+}: {
+  wine: Wine;
+  assets: Collection["assets"];
+}) {
   const photo = assets.find((asset) => asset.wine_id === wine.id);
   return photo ? (
-    <img className="wine-photo" src={`/api/media/${photo.id}`} alt={wine.name_ko} />
+    <img
+      className="wine-photo"
+      src={`/api/media/${photo.id}`}
+      alt={wine.name_ko}
+    />
   ) : (
     <Bottle type={wine.wine_type} />
   );
@@ -65,7 +76,14 @@ export function WineList({
     ] as string[],
     regions = [
       ...new Set(data.wines.map((w) => w.region).filter(Boolean)),
-    ] as string[];
+    ] as string[],
+    grapes = [
+      ...new Map(
+        data.wines
+          .flatMap((wine) => grapeNames(wine.grape))
+          .map((grape) => [grape.toLowerCase(), grape]),
+      ).values(),
+    ].sort((a, b) => a.localeCompare(b, "ko"));
   return (
     <>
       <div className="page-heading">
@@ -131,6 +149,18 @@ export function WineList({
         <div className="filter-row">
           <SlidersHorizontal size={18} />
           <select
+            aria-label="품종"
+            name="grape"
+            defaultValue={filters.grape ?? ""}
+          >
+            <option value="">모든 품종</option>
+            {grapes.map((grape) => (
+              <option key={grape} value={grape}>
+                {grape}
+              </option>
+            ))}
+          </select>
+          <select
             aria-label="와인 종류"
             name="type"
             defaultValue={filters.type?.[0] ?? ""}
@@ -149,7 +179,9 @@ export function WineList({
           >
             <option value="">모든 국가</option>
             {countries.map((c) => (
-              <option key={c} value={c}>{countryFlag(c)} {c}</option>
+              <option key={c} value={c}>
+                {countryFlag(c)} {c}
+              </option>
             ))}
           </select>
           <select
@@ -162,8 +194,16 @@ export function WineList({
               <option key={c}>{c}</option>
             ))}
           </select>
-          <RatingFilter name="vivinoMin" label="Vivino 평점" initial={ratingMinimum(filters.vivinoMin)} />
-          <RatingFilter name="myMin" label="내 평점" initial={ratingMinimum(filters.myMin)} />
+          <RatingFilter
+            name="vivinoMin"
+            label="Vivino 평점"
+            initial={ratingMinimum(filters.vivinoMin)}
+          />
+          <RatingFilter
+            name="myMin"
+            label="내 평점"
+            initial={ratingMinimum(filters.myMin)}
+          />
           <Button variant="outline" type="submit">
             적용
           </Button>
@@ -175,7 +215,10 @@ export function WineList({
           <span>
             와인 <strong>{cards.length}</strong>종
           </span>
-          <WineSort key={filters.sort ?? "latest"} sort={filters.sort ?? "latest"} />
+          <WineSort
+            key={filters.sort ?? "latest"}
+            sort={filters.sort ?? "latest"}
+          />
         </div>
       </form>
       {cards.length ? (
@@ -196,8 +239,14 @@ export function WineList({
                       <p className="wine-producer">{s.wine.producer}</p>
                     )}
                     <h2>{s.wine.name_ko}</h2>
+                    {s.wine.name_original?.trim() &&
+                      s.wine.name_original !== s.wine.name_ko && (
+                        <p className="wine-original">{s.wine.name_original}</p>
+                      )}
                     <p className="origin">
-                      <span aria-hidden="true">{countryFlag(s.wine.country)} </span>
+                      <span aria-hidden="true">
+                        {countryFlag(s.wine.country)}{" "}
+                      </span>
                       {[s.wine.country, s.wine.region]
                         .filter(Boolean)
                         .join(" · ") || "생산지 미확인"}
@@ -246,7 +295,9 @@ export function WineList({
                   <div className="wine-card-metrics">
                     <div className="wine-purchases">
                       <span className="metric-label">구매 기록</span>
-                      <strong>{s.receipts.length}회 · {s.bottles}병</strong>
+                      <strong>
+                        {s.receipts.length}회 · {s.bottles}병
+                      </strong>
                     </div>
                     <div className="wine-price">
                       <span className="metric-label">최근 구매 단가</span>
@@ -306,7 +357,9 @@ export function WineDetail({
         </div>
         <div>
           <p className="eyebrow">
-            {wineTypes[wine.wine_type]} · <span aria-hidden="true">{countryFlag(wine.country)} </span>{wine.country ?? "생산지 미확인"}
+            {wineTypes[wine.wine_type]} ·{" "}
+            <span aria-hidden="true">{countryFlag(wine.country)} </span>
+            {wine.country ?? "생산지 미확인"}
           </p>
           <h1>{wine.name_ko}</h1>
           <p className="subtitle">
@@ -331,7 +384,9 @@ export function WineDetail({
             </div>
           </div>
           <p>현재 보유량 미확인</p>
-          {wine.description && <p className="subtitle">{wine.description}</p>}
+          {visibleDescription(wine.description) && (
+            <p className="subtitle">{visibleDescription(wine.description)}</p>
+          )}
           {!demo && (
             <Button asChild>
               <Link href={`/purchases/new?wine=${id}`}>
@@ -352,10 +407,6 @@ export function WineDetail({
                 <strong>★ {r.score?.toFixed(1) ?? "미확인"}</strong>
                 <p>
                   {r.checked_on ?? "확인일 미상"} ·{" "}
-                  {r.rating_scope === "ALL_VINTAGES"
-                    ? "전체 빈티지"
-                    : vintageLabel(r.vintage_label)}{" "}
-                  ·{" "}
                   {r.verification_status === "needs_review"
                     ? "매칭 확인 필요"
                     : r.verification_status === "verified"
@@ -393,7 +444,7 @@ export function WineDetail({
                 )
                 .map((l) => (
                   <p key={l.id}>
-                    {vintageLabel(l.vintage_label)} · {l.bottle_quantity}병 ·{" "}
+                    {l.bottle_quantity}병 ·{" "}
                     {l.allocated_amount === null
                       ? "세트 · 병별 가격 미확인"
                       : won(l.allocated_amount)}

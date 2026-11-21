@@ -134,3 +134,7 @@ npm run test:e2e
 기기 OCR 대신 로그인 사용자의 Gemini 분석 API를 사용한다. `.env.local`에 `GEMINI_API_KEY`를 보관하고 서버를 재시작한다. `GEMINI_MODEL` 기본값은 `gemini-3.1-flash-lite`다. `GEMINI_ANALYSIS_ENABLED=false`로 중지할 수 있다. 키 없는 상태에서도 수동 입력은 가능하다. 키는 `NEXT_PUBLIC_`에 넣지 않는다. Vercel 사용 시에도 서버 환경변수에 별도로 등록한 뒤 승인된 배포를 수행해야 한다.
 
 무료 서비스에서는 개인정보를 보내지 않도록 미리보기에서 가린 후 전송한다. 세부 요청/응답과 설정은 [Gemini 구현](GEMINI_INTEGRATION.md)을 참조한다. 이번 변경에는 새 DB migration이 없으며 사용량 제한은 기존 `consume_rate_limit` RPC를 재사용한다.
+
+### 2026-11-21 설명 저장 후속 변경
+
+`codex/optional-vintage`의 구매 설명·영문명 저장에는 `202611210001_receipt_wine_description.sql` 적용이 필요하다. 기존 `wines` 컬럼을 사용하며 새 마스터 생성 시에만 값을 쓰도록 RPC를 확장한다. 빈티지를 생략한 직접 RPC도 UNKNOWN으로 정규화한다. 폐기 가능한 로컬 DB에서 검증한 뒤, 원격 적용은 대상 프로젝트에 대한 명시적 승인을 받고 진행한다. 코드 배포 전에 해당 환경에 마이그레이션을 적용해야 한다.

@@ -12,7 +12,10 @@ export type WineType = keyof typeof wineTypes;
 const text = z.string().trim().max(200).nullable();
 export const vintage = z
   .string()
-  .regex(/^(NV|UNKNOWN|[12]\d{3})$/, "빈티지를 확인해 주세요.");
+  .trim()
+  .regex(/^(NV|UNKNOWN|[12]\d{3})?$/, "빈티지를 확인해 주세요.")
+  .nullish()
+  .transform((value) => value || "UNKNOWN");
 export const today = () =>
   new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Seoul",
@@ -79,7 +82,9 @@ export const ratingInput = z
     wine_id: z.uuid(),
     source: z.literal("vivino").default("vivino"),
     score: z.number().min(0).max(5).multipleOf(0.1),
-    rating_scope: z.enum(["ALL_VINTAGES", "VINTAGE", "NV", "UNKNOWN"]),
+    rating_scope: z
+      .enum(["ALL_VINTAGES", "VINTAGE", "NV", "UNKNOWN"])
+      .default("ALL_VINTAGES"),
     vintage_label: vintage,
     checked_on: date,
     source_url: z
@@ -100,6 +105,8 @@ const bottle = z.object({
   wine_id: z.uuid().optional(),
   wine_name: z.string().trim().min(1).max(300).optional(),
   producer: z.string().trim().max(200).nullable().optional(),
+  name_original: z.string().trim().max(200).nullable().optional(),
+  description: z.string().trim().max(5000).nullable().optional(),
   vintage_label: vintage,
   bottle_quantity: z.number().int().min(1).max(10000),
 });
@@ -278,7 +285,9 @@ export function wineSummary(wine: Wine, data: Collection) {
     price,
     rating,
     myRating: notes[0]?.my_rating ?? null,
-    tastingNote: notes.find((note) => note.review_text?.trim())?.review_text?.trim() ?? null,
+    tastingNote:
+      notes.find((note) => note.review_text?.trim())?.review_text?.trim() ??
+      null,
     bottles: links.reduce((s, l) => s + l.bottle_quantity, 0),
     latest: receipts[0]?.purchased_on ?? null,
   };
@@ -288,13 +297,27 @@ export type Filters = {
   type?: string[];
   country?: string;
   region?: string;
+  grape?: string;
   vivinoMin?: string;
   myMin?: string;
   sort?: string;
 };
 export function ratingMinimum(raw?: string) {
   const score = Number(raw);
-  return score >= 1 && score <= 5 && Number.isInteger(score * 10) ? score : null;
+  return score >= 1 && score <= 5 && Number.isInteger(score * 10)
+    ? score
+    : null;
+}
+export function grapeNames(raw?: string | null) {
+  return [
+    ...new Set(
+      (raw ?? "")
+        .normalize("NFKC")
+        .split(/[,;/+·、]/)
+        .map((value) => value.trim().replace(/\s+/g, " "))
+        .filter(Boolean),
+    ),
+  ];
 }
 export function filteredWines(data: Collection, f: Filters) {
   const vivinoMin = ratingMinimum(f.vivinoMin);
@@ -312,6 +335,16 @@ export function filteredWines(data: Collection, f: Filters) {
         (!f.type?.length || f.type.includes(w.wine_type)) &&
         (!f.country || w.country === f.country) &&
         (!f.region || w.region === f.region) &&
+        (!f.grape ||
+          grapeNames(w.grape).some(
+            (grape) =>
+              grape.toLowerCase() ===
+              f
+                .grape!.normalize("NFKC")
+                .trim()
+                .replace(/\s+/g, " ")
+                .toLowerCase(),
+          )) &&
         (vivinoMin === null ||
           (s.rating?.score != null &&
             s.rating.verification_status !== "needs_review" &&

@@ -25,8 +25,10 @@ try{
   }
   async function session(id){const c=await connect();await c.query("select set_config('request.jwt.claim.sub',$1,false)",[id]);await c.query("set role authenticated");return c;}
   const ca=await session(a),cb=await session(b);
-  const receipt={purchased_on:"2025-10-10",paid_amount:10000,discount_amount:0,lines:[{raw_label:"Local test wine",line_kind:"wine",line_amount:10000,wines:[{bottle_quantity:1,vintage_label:"UNKNOWN"}]}]};
+  const receipt={purchased_on:"2025-10-10",paid_amount:10000,discount_amount:0,lines:[{raw_label:"Local test wine",line_kind:"wine",line_amount:10000,wines:[{bottle_quantity:1,description:"한국어 와인 설명",name_original:"Local Test Wine"}]}]};
   const {rows:[{r}]}=await ca.query("select save_receipt_targets($1) r",[receipt]);assert.ok(r.targets[0][0]);assert.equal((await cb.query("select * from wines")).rowCount,0);
+  assert.equal((await ca.query("select vintage_label from receipt_line_wines")).rows[0].vintage_label,"UNKNOWN");
+  assert.deepEqual((await ca.query("select description,name_original from wines")).rows[0],{description:"한국어 와인 설명",name_original:"Local Test Wine"});
   const ca2=await session(a);
   const updated=await Promise.allSettled([ca,ca2].map(c=>c.query("select save_receipt($1)",[{...receipt,id:r.id,version:1}])));
   assert.equal(updated.filter(x=>x.status==="fulfilled").length,1);

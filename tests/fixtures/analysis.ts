@@ -13,6 +13,7 @@ export const receiptDetailsFixture: ReceiptWineDetails = {
   alcohol_percent: { min: 12, max: 13 },
   confidence: "medium",
   notes: "상품명으로 추정한 가상 테스트 후보입니다.",
+  summary_ko: "소비뇽 블랑으로 만든 가상의 화이트 와인 설명입니다.",
 };
 export const receiptFixture: ReceiptAnalysis = {
   merchant: "가상 와인숍",
@@ -73,6 +74,7 @@ export const wineFixture: WineAnalysis = {
     alcohol_percent: null,
     bottle_volume_ml: null,
     label_description: null,
+    summary_ko: "라벨에서 확인한 테스트 화이트 와인 설명입니다.",
   },
   evidence: [
     { field: "name", text: "Example Blanc" },

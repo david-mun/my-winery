@@ -389,3 +389,27 @@ it("saves raw and catalog wine names atomically in the active owner's cellar",as
   await as(A); expect((await value("select count(*)::int n from wines"))?.n).toBe(0);
   await as(C);await denied(save,[JSON.stringify(receipt(false))]);
 });
+
+it("stores reviewed summaries and English names only for new owner wines, accepts omitted vintages and rolls back invalid receipts",async()=>{
+  const payload=(summary="한국어 와인 설명", paid=10000)=>({purchased_on:"2026-10-10",paid_amount:paid,discount_amount:0,lines:[{
+    line_kind:"wine",raw_label:"설명 테스트",line_amount:10000,
+    wines:[{wine_name:"설명 테스트",name_original:"Example Summary Wine",description:summary,bottle_quantity:1}]
+  }]});
+  const save="select public.save_receipt_targets($1::jsonb) result";
+  await as(B);
+  await denied(save,[JSON.stringify(payload("부분 저장 금지",123))]);
+  expect((await value("select count(*)::int n from wines"))?.n).toBe(0);
+  await db.query(save,[JSON.stringify(payload())]);
+  const wine=await value("select id,description,name_original from wines");
+  expect(wine).toMatchObject({description:"한국어 와인 설명",name_original:"Example Summary Wine"});
+  expect((await value("select vintage_label from receipt_line_wines"))?.vintage_label).toBe("UNKNOWN");
+  await db.query(save,[JSON.stringify(payload("기존 설명 덮어쓰기 금지"))]);
+  expect((await value("select description from wines"))?.description).toBe("한국어 와인 설명");
+  expect((await value("select count(*)::int n from wines"))?.n).toBe(1);
+  await denied(save,[JSON.stringify(payload("x".repeat(5001)))]);
+  await as(A);
+  expect((await value("select count(*)::int n from wines"))?.n).toBe(0);
+  const foreign=payload();
+  Object.assign(foreign.lines[0].wines[0],{wine_id:wine!.id});
+  await denied(save,[JSON.stringify(foreign)]);
+});

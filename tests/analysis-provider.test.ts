@@ -92,6 +92,20 @@ it("requests and returns receipt v3 product details while retaining raw labels a
       .wines.items.properties.details,
   ).toBeDefined();
 });
+
+it("does not require vintage_label in either Gemini request schema", () => {
+  const receipt = JSON.parse(JSON.stringify(servingSchema("receipt")));
+  const bottle = receipt.properties.lines.items.properties.wines.items;
+  expect(bottle.required).not.toContain("vintage_label");
+  expect(
+    bottle.properties.details.anyOf[0].properties.summary_ko,
+  ).toBeDefined();
+  const label = JSON.parse(JSON.stringify(servingSchema("wine-label")));
+  expect(label.properties.wine.anyOf[0].required).not.toContain(
+    "vintage_label",
+  );
+  expect(label.properties.wine.anyOf[0].properties.summary_ko).toBeDefined();
+});
 it.each([400, 401, 404, 429])(
   "does not repeat HTTP %i or echo upstream credentials",
   async (status) => {

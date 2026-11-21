@@ -537,8 +537,7 @@ export function PhotoAnalysis({
           </strong>
           {result.task === "wine-label" && (
             <p>
-              빈티지: {result.analysis.wine?.vintage_label} · 도수:{" "}
-              {result.analysis.wine?.alcohol_percent ?? "미확인"} · 용량:{" "}
+              도수: {result.analysis.wine?.alcohol_percent ?? "미확인"} · 용량:{" "}
               {result.analysis.wine?.bottle_volume_ml ?? "미확인"}
             </p>
           )}

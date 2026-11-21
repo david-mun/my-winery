@@ -35,6 +35,7 @@ export function validateAnalysis(
     const warnings = [...data.warnings];
     // Keep evidence keyed by field, rather than trusting model-generated paths.
     for (const field of Object.keys(wine) as (keyof typeof wine)[]) {
+      if (field === "summary_ko") continue;
       const v = wine[field];
       if (v === null || v === "UNKNOWN" || (Array.isArray(v) && v.length === 0))
         continue;
@@ -146,7 +147,6 @@ export function validateAnalysis(
         !line.raw_label.includes(bottle.vintage_label)
       ) {
         bottle.vintage_label = "UNKNOWN";
-        warnings.push(`${line.raw_label}: 빈티지를 원문에서 확인해 주세요.`);
       }
     }
   }
