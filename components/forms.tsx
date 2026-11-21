@@ -2,6 +2,10 @@
 /* Private signed images deliberately bypass the shared Next image optimizer. */
 /* eslint-disable @next/next/no-img-element */
 import { PhotoAnalysis } from "./analysis/photo-analysis";
+import {
+  visibleDescription,
+  preserveDescriptionMetadata,
+} from "@/lib/wine-description";
 import { ReceiptWineSuggestion } from "./analysis/receipt-wine-details";
 import {
   wineDescription,
@@ -247,7 +251,7 @@ export function WineForm({
     country: wine?.country ?? "",
     region: wine?.region ?? "",
     grape: wine?.grape ?? "",
-    description: wine?.description ?? "",
+    description: visibleDescription(wine?.description),
   });
   const [photo, setPhoto] = useState<File | null>(null),
     [attach, setAttach] = useState(true);
@@ -308,7 +312,13 @@ export function WineForm({
             const result = await request(
               `/api/wines${wine ? "/" + wine.id : ""}`,
               wine ? "PATCH" : "POST",
-              value,
+              {
+                ...value,
+                description: preserveDescriptionMetadata(
+                  value.description,
+                  wine?.description,
+                ),
+              },
             );
             id = result.id;
             setSavedId(id);
@@ -395,7 +405,7 @@ export function WineForm({
             />
           </Field>
         ))}
-        <Field label="메모" wide>
+        <Field label="와인 설명" wide>
           <textarea
             name="description"
             maxLength={5000}
@@ -496,7 +506,7 @@ export function NoteForm({ wineId, note }: { wineId: string; note?: Note }) {
             note ? "PATCH" : "POST",
             {
               wine_id: wineId,
-              vintage_label: string(f, "vintage_label") || "UNKNOWN",
+              vintage_label: note?.vintage_label ?? "UNKNOWN",
               my_rating: string(f, "my_rating")
                 ? Number(string(f, "my_rating"))
                 : null,
@@ -519,14 +529,6 @@ export function NoteForm({ wineId, note }: { wineId: string; note?: Note }) {
             step="0.1"
             placeholder="1.0~5.0"
             defaultValue={note?.my_rating?.toFixed(1) ?? ""}
-          />
-        </Field>
-        <Field label="빈티지">
-          <input
-            name="vintage_label"
-            pattern="NV|UNKNOWN|[12][0-9]{3}"
-            defaultValue={note?.vintage_label ?? "UNKNOWN"}
-            placeholder="2025 / NV / UNKNOWN"
           />
         </Field>
         <Field label="시음일 (선택)">
@@ -567,8 +569,7 @@ export function RatingForm({ wineId }: { wineId: string }) {
             wine_id: wineId,
             source: "vivino",
             score: Number(string(f, "score")),
-            rating_scope: string(f, "rating_scope"),
-            vintage_label: string(f, "vintage_label"),
+            rating_scope: "ALL_VINTAGES",
             checked_on: string(f, "checked_on"),
             source_url: string(f, "source_url"),
             verification_status: string(f, "verification_status"),
@@ -596,22 +597,6 @@ export function RatingForm({ wineId }: { wineId: string }) {
             max={today()}
             required
             defaultValue={today()}
-          />
-        </Field>
-        <Field label="평점 범위">
-          <select name="rating_scope">
-            <option value="ALL_VINTAGES">전체 빈티지</option>
-            <option value="VINTAGE">특정 연도</option>
-            <option value="NV">NV</option>
-            <option value="UNKNOWN">미확인</option>
-          </select>
-        </Field>
-        <Field label="평점 대상 빈티지">
-          <input
-            name="vintage_label"
-            defaultValue="UNKNOWN"
-            required
-            pattern="NV|UNKNOWN|[12][0-9]{3}"
           />
         </Field>
         <Field label="Vivino URL" wide>
@@ -842,8 +827,8 @@ export function ReceiptForm({
           <strong>Gemini 초안 · 품목 {draft.lines.length}개</strong>
           <p>
             구매처 표기: {draft.merchant ?? "미확인"}. 원본과 비교해
-            와인·수량·빈티지·세트와 빈 금액을 확인하세요. 세트 가격은 병별로
-            나누지 않습니다.
+            와인·수량·세트와 빈 금액을 확인하세요. 세트 가격은 병별로 나누지
+            않습니다.
           </p>
           {duplicate && (
             <p>
@@ -953,6 +938,8 @@ export function ReceiptForm({
                       analysisDetails: undefined,
                       wine_name: undefined,
                       producer: undefined,
+                      description: undefined,
+                      name_original: undefined,
                     })),
                   })
                 }
@@ -984,6 +971,8 @@ export function ReceiptForm({
                                   ? matches[0].id
                                   : undefined,
                               wine_name: name,
+                              description: details.summary_ko ?? undefined,
+                              name_original: details.name_en ?? undefined,
                               producer:
                                 matches.length === 1
                                   ? (matches[0].producer ?? undefined)
@@ -1014,6 +1003,8 @@ export function ReceiptForm({
                                 wine_name: chosen?.name_ko ?? x.wine_name,
                                 producer: chosen?.producer ?? undefined,
                                 analysisDetails: undefined,
+                                description: undefined,
+                                name_original: undefined,
                                 bottlePhoto: undefined,
                               }
                             : x,
@@ -1047,6 +1038,8 @@ export function ReceiptForm({
                                 ...x,
                                 wine_id: undefined,
                                 wine_name: e.target.value,
+                                description: undefined,
+                                name_original: undefined,
                                 analysisDetails: undefined,
                                 producer: undefined,
                                 catalogOriginal: undefined,
@@ -1084,6 +1077,8 @@ export function ReceiptForm({
                                     catalogOriginal: c?.original ?? undefined,
                                     analysisDetails: undefined,
                                     wine_name: c?.name,
+                                    description: undefined,
+                                    name_original: c?.original ?? undefined,
                                     producer: c?.producer,
                                   }
                                 : x,
@@ -1124,20 +1119,6 @@ export function ReceiptForm({
                 }
               />
               <div className="bottle-input">
-                <Field label="빈티지">
-                  <input
-                    value={w.vintage_label}
-                    required
-                    pattern="NV|UNKNOWN|[12][0-9]{3}"
-                    onChange={(e) =>
-                      change(i, {
-                        wines: l.wines.map((x, k) =>
-                          k === j ? { ...x, vintage_label: e.target.value } : x,
-                        ),
-                      })
-                    }
-                  />
-                </Field>
                 <Field label="병 수">
                   <input
                     type="number"

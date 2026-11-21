@@ -1204,3 +1204,11 @@ footer span {
 .photo-analysis .form-actions > label { width: 100%; max-width: 100%; min-width: 0; }
 .photo-analysis input[type="file"] { width: 100%; max-width: 100%; min-width: 0; }
 .photo-analysis .form-grid > label { min-width: 0; }
+
+.wine-original {
+  margin: 4px 0 8px;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}

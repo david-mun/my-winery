@@ -113,9 +113,11 @@ export function WinePhotoInput({
           style={{ maxHeight: 140, maxWidth: "100%", objectFit: "contain" }}
         />
       )}
-      {!photo && existingId && <DeletePhoto key={existingId} id={existingId} kind="wine" />}
+      {!photo && existingId && (
+        <DeletePhoto key={existingId} id={existingId} kind="wine" />
+      )}
       <p>
-        공개 사진은 와인명으로 검색합니다. 검색 결과의 빈티지와 라벨은 실제 병과
+        공개 사진은 와인명으로 검색합니다. 검색 결과의 상품과 라벨은 실제 병과
         다를 수 있습니다.
       </p>
       <Button

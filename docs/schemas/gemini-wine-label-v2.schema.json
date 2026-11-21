@@ -89,8 +89,15 @@
               }
             },
             "vintage_label": {
-              "type": "string",
-              "pattern": "^(UNKNOWN|NV|[12][0-9]{3})$"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(UNKNOWN|NV|[12][0-9]{3})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "alcohol_percent": {
               "anyOf": [
@@ -127,6 +134,19 @@
                   "type": "null"
                 }
               ]
+            },
+            "summary_ko": {
+              "default": null,
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1000
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "required": [
@@ -136,7 +156,6 @@
             "country",
             "region",
             "grapes",
-            "vintage_label",
             "alcohol_percent",
             "bottle_volume_ml",
             "label_description"

@@ -17,6 +17,7 @@ export default async function Wines({
         q: str("q"),
         country: str("country"),
         region: str("region"),
+        grape: str("grape"),
         type: Array.isArray(p.type) ? p.type : p.type ? [p.type] : [],
         vivinoMin: str("vivinoMin"),
         myMin: str("myMin"),

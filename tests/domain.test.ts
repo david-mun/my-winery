@@ -1,4 +1,4 @@
-import { readBody } from '../lib/request-body';
+import { readBody } from "../lib/request-body";
 import { describe, it, expect } from "vitest";
 import {
   receiptInput,
@@ -8,6 +8,7 @@ import {
   filteredWines,
   wineSummary,
   emptyCollection,
+  grapeNames,
 } from "../lib/domain";
 import { safeNext, sameOrigin } from "../lib/security";
 import { snapshot } from "../scripts/snapshot";
@@ -101,6 +102,26 @@ describe("domain and migration", () => {
       ),
     ).toBe(false);
   });
+  it("filters exact varietals within blends and combines grape with existing conditions", () => {
+    const data = demoCollection();
+    expect(grapeNames(" 샤르도네, 피노 누아 / 샤르도네 ")).toEqual([
+      "샤르도네",
+      "피노 누아",
+    ]);
+    expect(filteredWines(data, { grape: "샤르도네" })).toHaveLength(2);
+    expect(
+      filteredWines(data, {
+        grape: "샤르도네",
+        country: "칠레",
+        vivinoMin: "4",
+      }),
+    ).toHaveLength(1);
+    expect(
+      filteredWines(data, { grape: "샤르도네", type: ["red"] }),
+    ).toHaveLength(0);
+    expect(filteredWines(data, { grape: "" })).toHaveLength(4);
+    expect(filteredWines(data, { grape: "르도" })).toHaveLength(0);
+  });
   it("does not substitute an old known price for the latest unallocated purchase", () => {
     const d = demoCollection();
     d.receipts.push({
@@ -142,9 +163,11 @@ describe("domain and migration", () => {
       sanitizeImage(Buffer.from("<script>bad</script>"), "image/jpeg"),
     ).rejects.toThrow();
   });
-  it('caps chunked request bodies even when Content-Length is absent',async()=>{
-    const req=new Request('http://localhost',{method:'POST',body:'abcdefgh'});
-    await expect(readBody(req,4)).rejects.toThrow('BODY_TOO_LARGE');
+  it("caps chunked request bodies even when Content-Length is absent", async () => {
+    const req = new Request("http://localhost", {
+      method: "POST",
+      body: "abcdefgh",
+    });
+    await expect(readBody(req, 4)).rejects.toThrow("BODY_TOO_LARGE");
   });
-
 });

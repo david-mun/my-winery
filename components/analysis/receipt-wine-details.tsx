@@ -38,6 +38,7 @@ export function ReceiptWineSuggestion({
         </dd>
       </dl>
       <p>상품명으로 추정한 정보입니다. 실제 라벨과 대조해 주세요.</p>
+      {details.summary_ko && <p>{details.summary_ko}</p>}
       {details.notes && <p>{details.notes}</p>}
       <Button type="button" variant="outline" onClick={onChoose}>
         후보 와인명 사용

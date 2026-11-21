@@ -44,6 +44,22 @@ test("fictional collection search, filters and detail work without layout overfl
     page.getByRole("heading", { name: /내 와인 컬렉션/ }),
   ).toBeVisible();
   await expect(page.locator(".wine-card")).toHaveCount(4);
+  await expect(page.locator(".wine-card h2 + .wine-original")).toHaveCount(4);
+  await page.getByLabel("품종", { exact: true }).selectOption("샤르도네");
+  await page.getByRole("button", { name: "적용", exact: true }).click();
+  await expect(page.locator(".wine-card")).toHaveCount(2);
+  await page.getByLabel("국가", { exact: true }).selectOption("칠레");
+  await page.getByRole("button", { name: "적용", exact: true }).click();
+  await expect(page.locator(".wine-card")).toHaveCount(1);
+  await page.getByLabel("정렬").selectOption("name");
+  await expect(page).toHaveURL(/sort=name/);
+  expect(new URL(page.url()).searchParams.get("grape")).toBe("샤르도네");
+  await page.reload();
+  await expect(page.getByLabel("품종", { exact: true })).toHaveValue(
+    "샤르도네",
+  );
+  await page.getByRole("link", { name: "초기화", exact: true }).click();
+  await expect(page.locator(".wine-card")).toHaveCount(4);
   await page.getByLabel("정렬").selectOption("vivino");
   await expect(page).toHaveURL(/sort=vivino/);
   await expect(page.locator(".wine-card h2").first()).toHaveText("루나 힐 소비뇽 블랑");

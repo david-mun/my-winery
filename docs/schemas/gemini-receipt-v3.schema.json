@@ -132,8 +132,15 @@
                   ]
                 },
                 "vintage_label": {
-                  "type": "string",
-                  "pattern": "^(UNKNOWN|NV|[12][0-9]{3})$"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^(UNKNOWN|NV|[12][0-9]{3})?$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "quantity": {
                   "anyOf": [
@@ -268,6 +275,19 @@
                               "type": "null"
                             }
                           ]
+                        },
+                        "summary_ko": {
+                          "default": null,
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -291,9 +311,7 @@
               },
               "required": [
                 "name",
-                "vintage_label",
-                "quantity",
-                "details"
+                "quantity"
               ],
               "additionalProperties": false
             }

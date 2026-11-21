@@ -6,7 +6,12 @@ export type AnalysisTask = z.infer<typeof analysisTask>;
 const text = z.string().trim().min(1).max(200).nullable();
 const money = z.number().int().min(0).max(1_000_000_000).nullable();
 const quantity = z.number().int().min(1).max(10000).nullable();
-const vintage = z.string().regex(/^(UNKNOWN|NV|[12][0-9]{3})$/);
+const vintage = z
+  .string()
+  .trim()
+  .regex(/^(UNKNOWN|NV|[12][0-9]{3})?$/)
+  .nullish()
+  .transform((value) => value || "UNKNOWN");
 export const factFields = [
   "name",
   "producer",
@@ -41,6 +46,7 @@ export const wineFacts = z
     alcohol_percent: z.number().min(0).max(100).nullable(),
     bottle_volume_ml: z.number().int().min(1).max(30000).nullable(),
     label_description: z.string().min(1).max(1000).nullable(),
+    summary_ko: z.string().trim().min(1).max(1000).nullable().default(null),
   })
   .strict();
 export type WineFacts = z.infer<typeof wineFacts>;
@@ -62,6 +68,7 @@ export const receiptWineDetails = z
       .nullable(),
     confidence: z.enum(["high", "medium", "low"]),
     notes: z.string().min(1).max(500).nullable(),
+    summary_ko: z.string().trim().min(1).max(1000).nullable().default(null),
   })
   .strict();
 export type ReceiptWineDetails = z.infer<typeof receiptWineDetails>;
@@ -127,16 +134,7 @@ export type AnalysisResult =
   | { task: "wine-label"; analysis: WineAnalysis; warnings: string[] };
 
 export function wineDescription(wine: WineFacts) {
-  return [
-    wine.label_description,
-    wine.vintage_label !== "UNKNOWN"
-      ? `사진 빈티지: ${wine.vintage_label}`
-      : null,
-    wine.alcohol_percent !== null ? `도수: ${wine.alcohol_percent}%` : null,
-    wine.bottle_volume_ml !== null ? `용량: ${wine.bottle_volume_ml}mL` : null,
-  ]
-    .filter(Boolean)
-    .join("\n");
+  return wine.summary_ko ?? "";
 }
 
 // Compose only strings actually extracted from the label; never enrich from memory.
