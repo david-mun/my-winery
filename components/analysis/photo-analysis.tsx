@@ -11,6 +11,7 @@ import {
   wineDisplayName,
   receiptAnalysisSchema,
   wineAnalysisSchema,
+  winePhotoAnalysisSchema,
   type AnalysisResult,
   type AnalysisTask,
 } from "@/lib/analysis/contracts";
@@ -213,10 +214,15 @@ export function PhotoAnalysis({
               task,
               analysis: receiptAnalysisSchema.parse(body.analysis),
             } as const)
-          : ({
-              task,
-              analysis: wineAnalysisSchema.parse(body.analysis),
-            } as const);
+          : task === "wine-photo"
+            ? ({
+                task,
+                analysis: winePhotoAnalysisSchema.parse(body.analysis),
+              } as const)
+            : ({
+                task,
+                analysis: wineAnalysisSchema.parse(body.analysis),
+              } as const);
       if (revision.current !== version || controller.signal.aborted) return;
       setResult({
         ...parsed,
@@ -242,7 +248,12 @@ export function PhotoAnalysis({
       }
     }
   }
-  const label = task === "receipt" ? "영수증" : "와인 라벨";
+  const label =
+    task === "receipt"
+      ? "영수증"
+      : task === "wine-photo"
+        ? "와인"
+        : "와인 라벨";
   return (
     <section
       className="purchase-line photo-analysis"
@@ -253,7 +264,9 @@ export function PhotoAnalysis({
         JPEG·PNG·WebP, 선택 파일 10MB 이하.{" "}
         {task === "wine-label"
           ? "한 병의 라벨만 보이도록 잘라 주세요."
-          : "연락처·카드·전표번호 등 개인정보를 가려 주세요."}
+          : task === "wine-photo"
+            ? "한 병 또는 여러 병의 라벨이 잘 보이는 사진을 선택하세요. 최대 20병까지 분석합니다."
+            : "연락처·카드·전표번호 등 개인정보를 가려 주세요."}
       </p>
       <div className="form-actions">
         <label className="text-link">
@@ -531,10 +544,31 @@ export function PhotoAnalysis({
           <strong>
             {result.task === "receipt"
               ? `구매 초안 · 상품 ${result.analysis.lines.length}줄`
-              : result.analysis.wine
-                ? wineDisplayName(result.analysis.wine)
-                : ""}
+              : result.task === "wine-photo"
+                ? `구매 초안 · 와인 ${result.analysis.bottle_count}병`
+                : result.analysis.wine
+                  ? wineDisplayName(result.analysis.wine)
+                  : ""}
           </strong>
+          {result.task === "wine-photo" && (
+            <>
+              <ol>
+                {result.analysis.bottles.map((b) => (
+                  <li key={b.position_left_to_right}>
+                    {b.observed.wine
+                      ? wineDisplayName(b.observed.wine)
+                      : "미확인"}
+                    {b.product_candidate?.name_ko &&
+                      ` · 후보: ${b.product_candidate.name_ko}`}
+                  </li>
+                ))}
+              </ol>
+              <p>
+                구매일·구매처·가격은 직접 입력해 주세요. 사진 속 병 수와 실제
+                구매 수량도 확인하세요.
+              </p>
+            </>
+          )}
           {result.task === "wine-label" && (
             <p>
               도수: {result.analysis.wine?.alcohol_percent ?? "미확인"} · 용량:{" "}

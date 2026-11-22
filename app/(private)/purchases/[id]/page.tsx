@@ -100,7 +100,7 @@ export default async function Receipt({
         ))}
       </section>
       <section className="panel">
-        <h2>영수증 이미지</h2>
+        <h2>구매 사진 · 영수증 / 와인</h2>
         {notice.photo === "retry" && (
           <p role="alert">
             구매는 저장됐지만 사진 첨부에 실패했습니다. 아래에서 사진만 다시

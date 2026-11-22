@@ -53,7 +53,7 @@ export function DeletePhoto({
       <p>
         {kind === "wine"
           ? "이 와인과 연결된 구매 내역에서 이 사진을 삭제할까요?"
-          : "이 영수증 사진을 삭제할까요?"}
+          : "이 구매 사진을 삭제할까요?"}
       </p>
       <div className="form-actions">
         <Button type="button" variant="danger" disabled={busy} onClick={remove}>

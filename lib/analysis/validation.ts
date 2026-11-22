@@ -1,6 +1,7 @@
 import {
   receiptAnalysisSchema,
   wineAnalysisSchema,
+  winePhotoAnalysisSchema,
   type AnalysisTask,
   type AnalysisResult,
 } from "./contracts";
@@ -18,6 +19,54 @@ export function validateAnalysis(
   task: AnalysisTask,
   value: unknown,
 ): AnalysisResult {
+  if (task === "wine-photo") {
+    const parsed = winePhotoAnalysisSchema.safeParse(value);
+    if (!parsed.success)
+      throw new AnalysisError(
+        502,
+        "와인 사진 분석 형식이 올바르지 않습니다. 다시 분석해 주세요.",
+      );
+    const data = parsed.data;
+    if (
+      !data.bottle_count ||
+      data.bottle_count !== data.bottles.length ||
+      data.bottles.some((b, i) => b.position_left_to_right !== i + 1)
+    )
+      throw new AnalysisError(
+        422,
+        "와인 병을 구분하지 못했습니다. 라벨이 보이도록 다시 찍어 주세요.",
+      );
+    const warnings = [...data.warnings];
+    for (const bottle of data.bottles) {
+      const result = validateAnalysis("wine-label", bottle.observed);
+      if (result.task !== "wine-label")
+        throw new AnalysisError(502, "분석 결과를 확인해 주세요.");
+      bottle.observed = result.analysis;
+      warnings.push(...result.warnings);
+      // This task never supplies vintage or purchase facts, even with model evidence.
+      bottle.observed.wine!.vintage_label = "UNKNOWN";
+      const candidate = bottle.product_candidate;
+      if (candidate) {
+        for (const field of ["name_ko", "name_en", "summary_ko"] as const)
+          if (candidate[field])
+            candidate[field] =
+              candidate[field]!.replace(/[12][0-9]{3}/g, "")
+                .replace(/\s+/g, " ")
+                .trim() || null;
+        if (!candidate.name_ko && !candidate.name_en)
+          bottle.product_candidate = null;
+        if (
+          candidate.alcohol_percent &&
+          candidate.alcohol_percent.min > candidate.alcohol_percent.max
+        )
+          candidate.alcohol_percent = null;
+      }
+    }
+    warnings.push(
+      "와인 후보는 AI 추정입니다. 라벨과 대조하고 구매일·구매처·가격을 직접 입력해 주세요.",
+    );
+    return { task, analysis: data, warnings: [...new Set(warnings)] };
+  }
   if (task === "wine-label") {
     const parsed = wineAnalysisSchema.safeParse(value);
     if (!parsed.success)

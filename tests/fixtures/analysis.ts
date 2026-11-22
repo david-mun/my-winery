@@ -2,6 +2,7 @@ import type {
   ReceiptAnalysis,
   WineAnalysis,
   ReceiptWineDetails,
+  WinePhotoAnalysis,
 } from "../../lib/analysis/contracts";
 export const receiptDetailsFixture: ReceiptWineDetails = {
   name_ko: "가상 상세 와인 C",
@@ -81,5 +82,14 @@ export const wineFixture: WineAnalysis = {
     { field: "wine_type", text: "WHITE WINE" },
     { field: "vintage_label", text: "2025" },
   ],
+  warnings: [],
+};
+export const winePhotoFixture: WinePhotoAnalysis = {
+  bottle_count: 2,
+  bottles: [1, 2].map((position) => ({
+    position_left_to_right: position,
+    observed: structuredClone(wineFixture),
+    product_candidate: structuredClone(receiptDetailsFixture),
+  })),
   warnings: [],
 };

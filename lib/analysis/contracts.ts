@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // Shared data contract only. No provider, credentials or server imports here.
-export const analysisTask = z.enum(["receipt", "wine-label"]);
+export const analysisTask = z.enum(["receipt", "wine-label", "wine-photo"]);
 export type AnalysisTask = z.infer<typeof analysisTask>;
 const text = z.string().trim().min(1).max(200).nullable();
 const money = z.number().int().min(0).max(1_000_000_000).nullable();
@@ -89,6 +89,25 @@ export const wineAnalysisSchema = z
     warnings: z.array(z.string().max(500)).max(20),
   })
   .strict();
+// A photograph can contain one or many bottles. No purchase facts are accepted.
+export const winePhotoAnalysisSchema = z
+  .object({
+    bottle_count: z.number().int().min(0).max(20),
+    bottles: z
+      .array(
+        z
+          .object({
+            position_left_to_right: z.number().int().min(1).max(20),
+            observed: wineAnalysisSchema,
+            product_candidate: receiptWineDetails.nullable(),
+          })
+          .strict(),
+      )
+      .max(20),
+    warnings: z.array(z.string().max(500)).max(20),
+  })
+  .strict();
+export type WinePhotoAnalysis = z.infer<typeof winePhotoAnalysisSchema>;
 export const receiptAnalysisSchema = z
   .object({
     merchant: text,
@@ -131,7 +150,8 @@ export type ReceiptAnalysis = z.infer<typeof receiptAnalysisSchema>;
 export type WineAnalysis = z.infer<typeof wineAnalysisSchema>;
 export type AnalysisResult =
   | { task: "receipt"; analysis: ReceiptAnalysis; warnings: string[] }
-  | { task: "wine-label"; analysis: WineAnalysis; warnings: string[] };
+  | { task: "wine-label"; analysis: WineAnalysis; warnings: string[] }
+  | { task: "wine-photo"; analysis: WinePhotoAnalysis; warnings: string[] };
 
 export function wineDescription(wine: WineFacts) {
   return wine.summary_ko ?? "";

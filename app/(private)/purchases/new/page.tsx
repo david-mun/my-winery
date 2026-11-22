@@ -1,6 +1,6 @@
 import { pageUser } from "@/lib/auth";
 import { collection } from "@/lib/data";
-import { ReceiptForm, MerchantForm } from "@/components/forms";
+import { ReceiptForm } from "@/components/forms";
 export default async function NewPurchase({
   searchParams,
 }: {
@@ -15,12 +15,6 @@ export default async function NewPurchase({
           data={await collection(db)}
           wineId={(await searchParams).wine}
         />
-      </section>
-      <section className="panel">
-        <details>
-          <summary className="text-link">구매처 추가</summary>
-          <MerchantForm />
-        </details>
       </section>
     </>
   );
