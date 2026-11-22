@@ -58,11 +58,17 @@ beforeEach(() => {
     analysis: {},
   } as Awaited<ReturnType<typeof analyzeWithGemini>>);
 });
-it.each([401, 403])(
-  "denies status %i before any image decoding, rate or Google call",
-  async (status) => {
+it.each(
+  [401, 403].flatMap((status) =>
+    ["receipt", "wine-label", "wine-photo"].map(
+      (task) => [status, task] as const,
+    ),
+  ),
+)(
+  "denies status %i for %s before any image decoding, rate or Google call",
+  async (status, task) => {
     vi.mocked(requireUser).mockRejectedValue(new AppError(status, "denied"));
-    const res = await handleAnalysis(req(), "receipt");
+    const res = await handleAnalysis(req(), task);
     expect(res.status).toBe(status);
     expect(rate).not.toHaveBeenCalled();
     expect(analyzeWithGemini).not.toHaveBeenCalled();

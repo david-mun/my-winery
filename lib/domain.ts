@@ -107,6 +107,10 @@ const bottle = z.object({
   producer: z.string().trim().max(200).nullable().optional(),
   name_original: z.string().trim().max(200).nullable().optional(),
   description: z.string().trim().max(5000).nullable().optional(),
+  wine_type: wineInput.shape.wine_type.optional(),
+  country: z.string().trim().max(200).nullable().optional(),
+  region: z.string().trim().max(200).nullable().optional(),
+  grape: z.string().trim().max(200).nullable().optional(),
   vintage_label: vintage,
   bottle_quantity: z.number().int().min(1).max(10000),
 });

@@ -98,9 +98,9 @@ export function WineList({
         </div>
         {!demo && (
           <Button asChild>
-            <Link href="/wines/new">
+            <Link href="/purchases/new">
               <Plus size={18} />
-              와인 등록
+              구매 기록 추가
             </Link>
           </Button>
         )}

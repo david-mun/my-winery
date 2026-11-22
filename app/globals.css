@@ -1201,7 +1201,18 @@ footer span {
 .analysis-preview { position: relative; width: fit-content; max-width: 100%; margin-block: 12px; }
 .analysis-preview canvas { display: block; max-width: 100%; max-height: 540px; width: auto; height: auto; touch-action: none; cursor: crosshair; }
 .photo-analysis { min-width: 0; }
-.photo-analysis .form-actions > label { width: 100%; max-width: 100%; min-width: 0; }
+.purchase-source { border: 0; padding: 0; margin: 0 0 20px; min-width: 0; }
+.purchase-source legend { font-weight: 600; margin-bottom: 10px; }
+.purchase-source-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.purchase-source-options label { display: flex; align-items: flex-start; gap: 10px; border: 1px solid var(--border, #ddd); border-radius: 12px; padding: 14px; cursor: pointer; min-height: 72px; }
+.purchase-source-options label.selected { border-color: #8c233a; background: #faf3f5; }
+.purchase-source-options label:focus-within { outline: 2px solid #8c233a; outline-offset: 2px; }
+.purchase-source-options input { width: 18px; height: 18px; flex: 0 0 18px; margin-top: 3px; }
+.purchase-source-options span { min-width: 0; }
+.purchase-source-options strong, .purchase-source-options small { display: block; }
+.purchase-source-options small { margin-top: 5px; color: #6b6b65; }
+@media (max-width: 480px) { .purchase-source-options { grid-template-columns: 1fr; } }
+.photo-analysis .form-actions > label { display: flex; flex-direction: column; align-items: stretch; gap: 6px; width: 100%; max-width: 100%; min-width: 0; }
 .photo-analysis input[type="file"] { width: 100%; max-width: 100%; min-width: 0; }
 .photo-analysis .form-grid > label { min-width: 0; }
 

@@ -673,13 +673,90 @@ export function ReceiptForm({
     [paid, setPaid] = useState<number | "">(initial?.paid_amount ?? 0);
   const [date, setDate] = useState(initial?.purchased_on ?? today());
   const [merchant, setMerchant] = useState(initial?.merchant_id ?? "");
+  const [merchantName, setMerchantName] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
+  const [inputSource, setInputSource] = useState<"receipt" | "wine-photo">(
+    "receipt",
+  );
+  const [wineDraft, setWineDraft] = useState(false);
   const [analysisBusy, setAnalysisBusy] = useState(false);
   const [attachPhoto, setAttachPhoto] = useState(true);
   const [draft, setDraft] = useState<ReceiptAnalysis | null>(null);
   const [reviewed, setReviewed] = useState(false);
   const [composingLine, setComposingLine] = useState<number | null>(null);
+  const hasDraft = draft !== null || wineDraft;
+  function switchSource(next: typeof inputSource) {
+    if (next === inputSource) return;
+    if (
+      (photo ||
+        hasDraft ||
+        lines.some((l) => l.raw_label) ||
+        merchant ||
+        paid) &&
+      !confirm(
+        "사진 입력 방식을 바꾸면 현재 구매 초안이 초기화됩니다. 계속할까요?",
+      )
+    )
+      return;
+    setInputSource(next);
+    setPhoto(null);
+    setDraft(null);
+    setWineDraft(false);
+    setReviewed(false);
+    setLines([
+      { ...defaultLine(), line_amount: next === "wine-photo" ? "" : 0 },
+    ]);
+    setDate(next === "wine-photo" ? "" : today());
+    setPaid(next === "wine-photo" ? "" : 0);
+    setDiscount(0);
+    setMerchant("");
+    setMerchantName("");
+    s.setMessage("");
+  }
   function applyAnalysis(result: AnalysisResult) {
+    if (result.task === "wine-photo" && inputSource === "wine-photo") {
+      if (
+        !confirm(
+          "분석한 와인으로 현재 품목을 교체할까요? 구매일·구매처·실결제액은 유지하고 품목별 가격은 직접 입력합니다.",
+        )
+      )
+        return;
+      setLines(
+        result.analysis.bottles.map((bottle) => {
+          const wine = bottle.observed.wine!;
+          const name = wineDisplayName(wine);
+          const matches = data.wines.filter(
+            (w) => w.name_ko === name || w.name_original === name,
+          );
+          return {
+            line_kind: "wine",
+            raw_label: name,
+            line_amount: "",
+            wines: [
+              {
+                wine_id: matches.length === 1 ? matches[0].id : undefined,
+                wine_name: name,
+                name_original: name,
+                producer: wine.producer,
+                wine_type: wine.wine_type ?? "other",
+                country: wine.country,
+                region: wine.region,
+                grape: wine.grapes.join(", ") || null,
+                description: wineDescription(wine),
+                vintage_label: "UNKNOWN",
+                bottle_quantity: 1,
+                analysisDetails: bottle.product_candidate,
+              },
+            ],
+          };
+        }),
+      );
+      setDraft(null);
+      setWineDraft(true);
+      setReviewed(false);
+      s.setMessage("");
+      return;
+    }
     if (result.task !== "receipt") return;
     if (!confirm("분석한 초안으로 현재 구매 입력 내용을 교체할까요?")) return;
     const value = result.analysis;
@@ -710,11 +787,12 @@ export function ReceiptForm({
       data.merchants.find((m) => m.name === value.merchant)?.id ?? "",
     );
     setDraft(value);
+    setWineDraft(false);
     setReviewed(false);
     s.setMessage("");
   }
   const duplicate =
-    draft &&
+    hasDraft &&
     data.receipts.find(
       (r) => r.purchased_on === date && r.paid_amount === paid,
     );
@@ -728,14 +806,15 @@ export function ReceiptForm({
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        if (!amountsComplete || (draft && !reviewed)) return;
+        if (!amountsComplete || (hasDraft && !reviewed)) return;
         const f = new FormData(e.currentTarget);
         s.save(async () => {
           const payload = receiptInput.parse({
             ...(initial?.id
               ? { id: initial.id, version: initial.version }
               : {}),
-            merchant_id: optional(f, "merchant_id"),
+            merchant_id:
+              merchant === "__new__" ? null : optional(f, "merchant_id"),
             purchased_on: string(f, "purchased_on"),
             discount_amount: discount,
             paid_amount: paid,
@@ -745,6 +824,18 @@ export function ReceiptForm({
           if (demo) {
             s.setMessage("금액 검증 통과 · 데모에서는 저장하지 않습니다.");
             return;
+          }
+          if (merchant === "__new__") {
+            const existing = data.merchants.find(
+              (m) => m.name === merchantName.trim(),
+            );
+            const created =
+              existing ??
+              (await request("/api/merchants", "POST", {
+                name: merchantName.trim(),
+              }));
+            payload.merchant_id = created.id;
+            setMerchant(created.id);
           }
           const result = await request(
             `/api/purchases${initial?.id ? "/" + initial.id : ""}`,
@@ -793,6 +884,45 @@ export function ReceiptForm({
     >
       {!initial && (
         <>
+          <fieldset className="purchase-source" disabled={s.busy}>
+            <legend>사진 입력 방식</legend>
+            <div className="purchase-source-options">
+              {(
+                [
+                  ["receipt", "영수증 사진", "와인과 구매 정보를 함께 읽어요"],
+                  [
+                    "wine-photo",
+                    "와인 사진",
+                    "한 병 또는 여러 병 · 구매 정보는 직접 입력",
+                  ],
+                ] as const
+              ).map(([value, label, description]) => (
+                <label
+                  key={value}
+                  className={inputSource === value ? "selected" : ""}
+                >
+                  <input
+                    type="radio"
+                    name="photo_source"
+                    value={value}
+                    checked={inputSource === value}
+                    onChange={() => switchSource(value)}
+                  />
+                  <span>
+                    <strong>{label}</strong>
+                    <small>{description}</small>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          {inputSource === "wine-photo" && (
+            <p className="auth-notice">
+              사진에서 와인 정보를 읽습니다. 구매일·구매처·품목별
+              가격·실결제액은 직접 입력해 주세요. 사진 없이 직접 입력할 수도
+              있습니다.
+            </p>
+          )}
           {demo ? (
             <p className="auth-notice">
               사진 분석은 로그인 후 사용할 수 있습니다. 데모에서는 직접 입력을
@@ -800,7 +930,8 @@ export function ReceiptForm({
             </p>
           ) : (
             <PhotoAnalysis
-              task="receipt"
+              key={inputSource}
+              task={inputSource}
               disabled={s.busy}
               onFile={(file) => {
                 setPhoto(file);
@@ -842,6 +973,18 @@ export function ReceiptForm({
           )}
         </div>
       )}
+      {wineDraft && (
+        <div className="auth-notice" role="status">
+          <strong>
+            Gemini 초안 · 와인{" "}
+            {lines.reduce((count, l) => count + l.wines.length, 0)}종
+          </strong>
+          <p>
+            라벨과 후보 정보를 확인해 주세요. 각 품목의 가격과 실제 구매 병 수를
+            입력하고, 묶음 구매라면 품목 종류를 세트로 변경하세요.
+          </p>
+        </div>
+      )}
       <div className="form-grid">
         <Field label="구매일 *">
           <input
@@ -853,20 +996,46 @@ export function ReceiptForm({
             onChange={(e) => setDate(e.target.value)}
           />
         </Field>
-        <Field label="구매처">
+        <Field
+          label={
+            inputSource === "wine-photo" && !initial ? "구매처 *" : "구매처"
+          }
+        >
           <select
             name="merchant_id"
+            required={inputSource === "wine-photo" && !initial}
             value={merchant}
             onChange={(e) => setMerchant(e.target.value)}
           >
-            <option value="">미기재</option>
+            <option value="">
+              {inputSource === "wine-photo" && !initial
+                ? "구매처를 선택해 주세요"
+                : "미기재"}
+            </option>
             {data.merchants.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name}
               </option>
             ))}
+            {merchant &&
+              merchant !== "__new__" &&
+              !data.merchants.some((m) => m.id === merchant) && (
+                <option value={merchant}>{merchantName}</option>
+              )}
+            <option value="__new__">새 구매처 직접 입력</option>
           </select>
         </Field>
+        {merchant === "__new__" && (
+          <Field label="새 구매처 이름 *">
+            <input
+              name="merchant_name"
+              required
+              maxLength={200}
+              value={merchantName}
+              onChange={(e) => setMerchantName(e.target.value)}
+            />
+          </Field>
+        )}
       </div>
       {lines.map((l, i) => (
         <div className="purchase-line" key={i}>
@@ -918,12 +1087,23 @@ export function ReceiptForm({
                 }
               />
             </Field>
-            <Field label="영수증 상품명" wide>
+            <Field
+              label={
+                inputSource === "wine-photo"
+                  ? "사진 속 와인명"
+                  : "영수증 상품명"
+              }
+              wide
+            >
               <input
                 value={l.raw_label}
                 maxLength={300}
                 required
-                placeholder="영수증에 적힌 상품명"
+                placeholder={
+                  inputSource === "wine-photo"
+                    ? "라벨에 적힌 와인명"
+                    : "영수증에 적힌 상품명"
+                }
                 onCompositionStart={() => setComposingLine(i)}
                 onCompositionEnd={() => setComposingLine(null)}
                 onBlur={() => setComposingLine(null)}
@@ -940,6 +1120,10 @@ export function ReceiptForm({
                       producer: undefined,
                       description: undefined,
                       name_original: undefined,
+                      wine_type: undefined,
+                      country: undefined,
+                      region: undefined,
+                      grape: undefined,
                     })),
                   })
                 }
@@ -950,6 +1134,7 @@ export function ReceiptForm({
             <div key={j}>
               {w.analysisDetails && (
                 <ReceiptWineSuggestion
+                  compact={inputSource === "wine-photo"}
                   details={w.analysisDetails}
                   onChoose={() => {
                     const details = w.analysisDetails!;
@@ -977,6 +1162,15 @@ export function ReceiptForm({
                                 matches.length === 1
                                   ? (matches[0].producer ?? undefined)
                                   : (details.producer ?? undefined),
+                              ...(inputSource === "wine-photo"
+                                ? {
+                                    country: details.country,
+                                    region: details.region,
+                                    grape:
+                                      details.grapes.join(", ").slice(0, 200) ||
+                                      null,
+                                  }
+                                : {}),
                               bottlePhoto: undefined,
                               catalogOriginal: undefined,
                             }
@@ -1005,6 +1199,10 @@ export function ReceiptForm({
                                 analysisDetails: undefined,
                                 description: undefined,
                                 name_original: undefined,
+                                wine_type: undefined,
+                                country: undefined,
+                                region: undefined,
+                                grape: undefined,
                                 bottlePhoto: undefined,
                               }
                             : x,
@@ -1042,6 +1240,10 @@ export function ReceiptForm({
                                 name_original: undefined,
                                 analysisDetails: undefined,
                                 producer: undefined,
+                                wine_type: undefined,
+                                country: undefined,
+                                region: undefined,
+                                grape: undefined,
                                 catalogOriginal: undefined,
                               }
                             : x,
@@ -1051,7 +1253,83 @@ export function ReceiptForm({
                   />
                 </Field>
               </div>
+              {inputSource === "wine-photo" && !w.wine_id && (
+                <details className="wine-draft-details">
+                  <summary className="text-link">와인 상세 정보 수정</summary>
+                  <div className="form-grid">
+                    <Field label="종류">
+                      <select
+                        value={w.wine_type ?? "other"}
+                        onChange={(e) =>
+                          change(i, {
+                            wines: l.wines.map((b, index) =>
+                              index === j
+                                ? {
+                                    ...b,
+                                    wine_type: e.target
+                                      .value as Wine["wine_type"],
+                                  }
+                                : b,
+                            ),
+                          })
+                        }
+                      >
+                        {Object.entries(wineTypes).map(([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    {(
+                      [
+                        ["name_original", "원어 이름"],
+                        ["producer", "생산자"],
+                        ["country", "국가"],
+                        ["region", "지역"],
+                        ["grape", "품종"],
+                      ] as const
+                    ).map(([field, label]) => (
+                      <Field key={field} label={label}>
+                        <input
+                          maxLength={200}
+                          value={w[field] ?? ""}
+                          onChange={(e) =>
+                            change(i, {
+                              wines: l.wines.map((b, index) =>
+                                index === j
+                                  ? { ...b, [field]: e.target.value || null }
+                                  : b,
+                              ),
+                            })
+                          }
+                        />
+                      </Field>
+                    ))}
+                    <Field label="와인 설명" wide>
+                      <textarea
+                        maxLength={5000}
+                        value={w.description ?? ""}
+                        onChange={(e) =>
+                          change(i, {
+                            wines: l.wines.map((b, index) =>
+                              index === j
+                                ? { ...b, description: e.target.value || null }
+                                : b,
+                            ),
+                          })
+                        }
+                      />
+                    </Field>
+                  </div>
+                </details>
+              )}
               <CatalogPicker
+                sourceLabel={
+                  inputSource === "wine-photo"
+                    ? "사진 속 와인명"
+                    : "영수증 상품명"
+                }
                 key={l.raw_label}
                 label={l.raw_label}
                 labelEdited={!!l.labelEdited}
@@ -1080,6 +1358,10 @@ export function ReceiptForm({
                                     description: undefined,
                                     name_original: c?.original ?? undefined,
                                     producer: c?.producer,
+                                    wine_type: undefined,
+                                    country: undefined,
+                                    region: undefined,
+                                    grape: undefined,
                                   }
                                 : x,
                             ),
@@ -1179,15 +1461,29 @@ export function ReceiptForm({
       <Button
         type="button"
         variant="outline"
-        onClick={() => setLines([...lines, defaultLine()])}
+        onClick={() =>
+          setLines([
+            ...lines,
+            {
+              ...defaultLine(),
+              line_amount: inputSource === "wine-photo" ? "" : 0,
+            },
+          ])
+        }
       >
         <Plus size={16} />
         품목 추가
       </Button>
       <div className="form-grid" style={{ marginTop: 24 }}>
-        <Field label="영수증 할인 (원)">
+        <Field
+          label={
+            inputSource === "wine-photo" ? "구매 할인 (원)" : "영수증 할인 (원)"
+          }
+        >
           <input
-            aria-label="영수증 할인"
+            aria-label={
+              inputSource === "wine-photo" ? "구매 할인" : "영수증 할인"
+            }
             type="number"
             min="0"
             step="1"
@@ -1230,14 +1526,16 @@ export function ReceiptForm({
           paid !== sum && <p>차액을 수정해야 저장할 수 있습니다.</p>
         )}
       </div>
-      {draft && (
+      {hasDraft && (
         <label className="filter-check">
           <input
             type="checkbox"
             checked={reviewed}
             onChange={(e) => setReviewed(e.target.checked)}
           />
-          원본 영수증과 품목·금액 및 중복 여부를 확인했습니다.
+          {wineDraft
+            ? "와인 사진과 와인 정보·구매일·구매처·금액·수량 및 중복 여부를 확인했습니다."
+            : "원본 영수증과 품목·금액 및 중복 여부를 확인했습니다."}
         </label>
       )}
       <div className="form-actions">
@@ -1248,7 +1546,7 @@ export function ReceiptForm({
             !amountsComplete ||
             paid !== sum ||
             !lines.length ||
-            (draft !== null && !reviewed)
+            (hasDraft && !reviewed)
           }
         >
           {s.busy ? "저장 중…" : demo ? "입력 검증" : "구매 저장"}
@@ -1307,7 +1605,7 @@ export function MediaForm({
             >
               <img
                 src={`/api/media/${a.id}`}
-                alt={kind === "wine" ? "내 와인 사진" : "비공개 영수증 이미지"}
+                alt={kind === "wine" ? "내 와인 사진" : "비공개 구매 사진"}
               />
             </a>
             {a.photo_credit && (

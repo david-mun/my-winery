@@ -152,7 +152,10 @@ test("authenticated owner can create wine, receipt, note, edit and delete withou
     .fill("LocalTestPassword123!");
   await page.getByRole("button", { name: "로그인", exact: true }).click();
   await expect(page).toHaveURL(/\/wines$/);
-  await page.getByRole("link", { name: "와인 등록", exact: true }).click();
+  await expect(page.getByRole("link", { name: "와인 등록", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "구매 기록 추가", exact: true })).toHaveAttribute("href", "/purchases/new");
+  // Keep exercising the legacy direct form; the collection now routes additions through purchases.
+  await page.goto("/wines/new");
   await page
     .getByLabel("와인 이름 *", { exact: true })
     .fill("테스트 셀러 " + info.project.name);

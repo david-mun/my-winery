@@ -4,18 +4,15 @@ import { Button } from "@/components/ui/button";
 export function ReceiptWineSuggestion({
   details,
   onChoose,
+  compact = false,
 }: {
   details: ReceiptWineDetails;
   onChoose: () => void;
+  compact?: boolean;
 }) {
   const alcohol = details.alcohol_percent;
-  return (
-    <aside
-      className="auth-notice"
-      aria-label="AI 와인 후보"
-      style={{ overflowWrap: "anywhere" }}
-    >
-      <strong>AI 와인 후보 · 확인 필요</strong>
+  const facts = (
+    <>
       <dl>
         <dt>한글 이름</dt>
         <dd>{details.name_ko ?? "미확인"}</dd>
@@ -40,6 +37,26 @@ export function ReceiptWineSuggestion({
       <p>상품명으로 추정한 정보입니다. 실제 라벨과 대조해 주세요.</p>
       {details.summary_ko && <p>{details.summary_ko}</p>}
       {details.notes && <p>{details.notes}</p>}
+    </>
+  );
+  return (
+    <aside
+      className="auth-notice"
+      aria-label="AI 와인 후보"
+      style={{ overflowWrap: "anywhere" }}
+    >
+      <strong>AI 와인 후보 · 확인 필요</strong>
+      {compact ? (
+        <>
+          <p>{details.name_ko ?? details.name_en ?? "미확인"}</p>
+          <details>
+            <summary className="text-link">후보 상세 확인</summary>
+            {facts}
+          </details>
+        </>
+      ) : (
+        facts
+      )}
       <Button type="button" variant="outline" onClick={onChoose}>
         후보 와인명 사용
       </Button>

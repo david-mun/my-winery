@@ -413,3 +413,33 @@ it("stores reviewed summaries and English names only for new owner wines, accept
   Object.assign(foreign.lines[0].wines[0],{wine_id:wine!.id});
   await denied(save,[JSON.stringify(foreign)]);
 });
+
+it("saves reviewed photo details atomically, reuses wine masters and denies foreign owners", async () => {
+  const save = "select public.save_receipt_targets($1::jsonb) result";
+  const wine = { wine_name: "사진 상세 와인", producer: "Example Estate", name_original: "Photo Blanc", wine_type: "white", country: "뉴질랜드", region: "말보로", grape: "소비뇽 블랑", description: "라벨 확인 후 채택한 설명", bottle_quantity: 1 };
+  const payload = { purchased_on: "2026-10-10", paid_amount: 30000, discount_amount: 0, lines: [1, 2].map(() => ({ line_kind: "wine", raw_label: "Photo Blanc", line_amount: 15000, wines: [{ ...wine }] })) };
+  await as(B);
+  await db.query(save, [JSON.stringify(payload)]);
+  expect((await value("select count(*)::int n from wines"))?.n).toBe(1);
+  expect((await value("select count(*)::int n from receipt_line_wines"))?.n).toBe(2);
+  const stored = await value("select id,wine_type,country,region,grape,description from wines");
+  expect(stored).toMatchObject({ wine_type: "white", country: "뉴질랜드", region: "말보로", grape: "소비뇽 블랑", description: wine.description });
+  const repeated = structuredClone(payload);
+  repeated.lines[0].wines[0].country = "덮어쓰기 금지";
+  await db.query(save, [JSON.stringify(repeated)]);
+  expect((await value("select country from wines"))?.country).toBe("뉴질랜드");
+  for (const details of [{ country: { value: "bad" } }, { grape: "x".repeat(201) }, { wine_type: "invented" }]) {
+    const invalid = structuredClone(payload);
+    Object.assign(invalid.lines[1].wines[0], { wine_name: "잘못된 새 와인", ...details });
+    await denied(save, [JSON.stringify(invalid)]);
+  }
+  expect((await value("select count(*)::int n from purchase_receipts"))?.n).toBe(2);
+  await as(A);
+  expect((await value("select count(*)::int n from wines"))?.n).toBe(0);
+  const foreign = structuredClone(payload);
+  Object.assign(foreign.lines[0].wines[0], { wine_id: stored!.id });
+  await denied(save, [JSON.stringify(foreign)]);
+  expect((await value("select count(*)::int n from wines"))?.n).toBe(0);
+  await as(C);
+  await denied(save, [JSON.stringify(payload)]);
+});

@@ -26,12 +26,14 @@ export function CatalogPicker({
   labelComposing,
   selected,
   onChoose,
+  sourceLabel = "영수증 상품명",
 }: {
   label: string;
   labelEdited: boolean;
   labelComposing: boolean;
   selected: string | null;
   onChoose: (wine: CatalogWine | null) => void;
+  sourceLabel?: string;
 }) {
   const [query, setQuery] = useState(label),
     [result, setResult] = useState<CatalogResult | null>(null),
@@ -81,7 +83,7 @@ export function CatalogPicker({
           if (!signal.aborted) {
             setFailed(true);
             setMessage(
-              "지금은 검색할 수 없습니다. 영수증 상품명으로 저장할 수 있습니다.",
+              `지금은 검색할 수 없습니다. ${sourceLabel}으로 저장할 수 있습니다.`,
             );
           }
         } finally {
@@ -93,12 +95,12 @@ export function CatalogPicker({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [term, enabled, composing, labelComposing, retry]);
+  }, [term, enabled, composing, labelComposing, retry, sourceLabel]);
   return (
     <div className="catalog-picker">
       <p>
         <strong>저장할 와인명:</strong>{" "}
-        {selected ?? (label || "영수증 상품명을 입력하세요")}
+        {selected ?? (label || `${sourceLabel}을 입력하세요`)}
       </p>
       <label>
         공개 와인 DB 검색어
@@ -185,10 +187,10 @@ export function CatalogPicker({
             setBusy(false);
             setFailed(false);
             onChoose(null);
-            setMessage("영수증 상품명을 사용합니다.");
+            setMessage(`${sourceLabel}을 사용합니다.`);
           }}
         >
-          영수증 상품명 그대로 사용
+          {sourceLabel} 그대로 사용
         </Button>
       )}
     </div>

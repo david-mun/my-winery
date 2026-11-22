@@ -5,6 +5,7 @@ import {
   wineFixture,
   receiptFixture,
   receiptDetailsFixture,
+  winePhotoFixture,
 } from "./fixtures/analysis";
 const response = () =>
   Response.json({
@@ -19,6 +20,42 @@ beforeEach(() => {
   vi.stubEnv("GEMINI_API_KEY", "test-only-not-a-real-secret");
   vi.stubEnv("GEMINI_ANALYSIS_ENABLED", "true");
   vi.stubEnv("GEMINI_MODEL", "gemini-3.1-flash-lite");
+});
+it("uses the multi-bottle photo contract without receipt facts and validates the result", async () => {
+  const fetcher = vi
+    .fn()
+    .mockResolvedValue(
+      Response.json({
+        candidates: [
+          {
+            finishReason: "STOP",
+            content: { parts: [{ text: JSON.stringify(winePhotoFixture) }] },
+          },
+        ],
+      }),
+    );
+  vi.stubGlobal("fetch", fetcher);
+  const result = await analyzeWithGemini(
+    "wine-photo",
+    Buffer.from("fixture"),
+    new AbortController().signal,
+  );
+  expect(result).toMatchObject({
+    task: "wine-photo",
+    schema_version: "1.0",
+    analysis: { bottle_count: 2 },
+  });
+  const body = JSON.parse(fetcher.mock.calls[0][1].body);
+  expect(body.generationConfig.maxOutputTokens).toBe(16000);
+  const properties = body.generationConfig.responseJsonSchema.properties;
+  expect(properties.bottles).toBeDefined();
+  for (const field of [
+    "merchant",
+    "purchased_on",
+    "paid_amount",
+    "discount_amount",
+  ])
+    expect(properties[field]).toBeUndefined();
 });
 afterEach(() => {
   vi.unstubAllEnvs();

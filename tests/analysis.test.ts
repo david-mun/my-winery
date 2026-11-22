@@ -4,6 +4,7 @@ import {
   receiptFixture,
   wineFixture,
   receiptDetailsFixture,
+  winePhotoFixture,
 } from "./fixtures/analysis";
 import { wineDisplayName } from "../lib/analysis/contracts";
 import { receiptInput } from "../lib/domain";
@@ -108,6 +109,61 @@ describe("provider-independent photo analysis validation", () => {
       wine: { vintage_label: "NV" },
     });
   });
+});
+
+it("accepts one or many wine bottles, clears unsupported facts and never accepts purchase facts", () => {
+  for (const count of [1, 2]) {
+    const value = structuredClone(winePhotoFixture);
+    value.bottle_count = count;
+    value.bottles = value.bottles.slice(0, count);
+    value.bottles[0].observed.wine!.country = "unsupported";
+    value.bottles[0].product_candidate!.name_en = "Example 2022";
+    value.bottles[0].product_candidate!.alcohol_percent = { min: 14, max: 12 };
+    const result = validateAnalysis("wine-photo", value);
+    if (result.task !== "wine-photo") throw Error();
+    expect(result.analysis.bottles).toHaveLength(count);
+    expect(result.analysis.bottles[0].observed.wine).toMatchObject({
+      country: null,
+      vintage_label: "UNKNOWN",
+    });
+    expect(result.analysis.bottles[0].product_candidate).toMatchObject({
+      name_en: "Example",
+      alcohol_percent: null,
+    });
+    expect(() =>
+      validateAnalysis("wine-photo", { ...value, paid_amount: 1000 }),
+    ).toThrow();
+    expect(() =>
+      validateAnalysis("wine-photo", { ...value, purchased_on: "2026-10-10" }),
+    ).toThrow();
+    expect(() =>
+      validateAnalysis("wine-photo", { ...value, merchant: "invented" }),
+    ).toThrow();
+  }
+});
+
+it("rejects ambiguous, empty or oversized multi-bottle output and model-supplied IDs", () => {
+  const value = structuredClone(winePhotoFixture);
+  expect(() =>
+    validateAnalysis("wine-photo", { ...value, bottle_count: 1 }),
+  ).toThrow();
+  expect(() =>
+    validateAnalysis("wine-photo", {
+      bottle_count: 0,
+      bottles: [],
+      warnings: [],
+    }),
+  ).toThrow();
+  expect(() =>
+    validateAnalysis("wine-photo", { ...value, bottle_count: 21 }),
+  ).toThrow();
+  value.bottles[1].position_left_to_right = 1;
+  expect(() => validateAnalysis("wine-photo", value)).toThrow();
+  value.bottles[1].position_left_to_right = 2;
+  Object.assign(value.bottles[0].product_candidate!, {
+    wine_id: "another-owner",
+  });
+  expect(() => validateAnalysis("wine-photo", value)).toThrow();
 });
 
 it("keeps product suggestions separate from printed names, vintage and bundle accounting", () => {
