@@ -6,7 +6,8 @@ import { DeletePhoto } from "./delete-photo";
 import { Button } from "./ui/button";
 import { commonsPhotos, type WinePhotoHit } from "@/lib/wine-photo-catalog";
 import { prepareUpload } from "@/lib/image-client";
-export type BottlePhoto = { file: File } | { hit: WinePhotoHit };
+export type BottlePhoto =
+  { file: File; analysisSource?: File } | { hit: WinePhotoHit };
 export function WinePhotoInput({
   name,
   existingId,
@@ -92,19 +93,33 @@ export function WinePhotoInput({
     : existingId
       ? "/api/media/" + existingId
       : "";
+  const automatic = photo && "file" in photo && photo.analysisSource;
+  const preview = photo && "file" in photo && (
+    <img
+      ref={localPreview}
+      alt="와인 병 사진 미리보기"
+      style={{
+        display: "block",
+        maxHeight: 140,
+        maxWidth: "100%",
+        objectFit: "contain",
+      }}
+    />
+  );
   return (
     <details className="purchase-line">
       <summary className="text-link">
         와인 병 사진{" "}
-        {photo ? "· 첨부 예정" : existingId ? "· 등록됨" : "· 선택 사항"}
+        {automatic
+          ? "· 분석 사진 첨부 예정"
+          : photo
+            ? "· 첨부 예정"
+            : existingId
+              ? "· 등록됨"
+              : "· 선택 사항"}
+        {automatic && preview}
       </summary>
-      {photo && "file" in photo && (
-        <img
-          ref={localPreview}
-          alt="와인 병 사진 미리보기"
-          style={{ maxHeight: 140, maxWidth: "100%", objectFit: "contain" }}
-        />
-      )}
+      {!automatic && preview}
       {src && (
         <img
           alt="와인 병 사진 미리보기"

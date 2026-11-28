@@ -1,4 +1,7 @@
-export async function prepareUpload(file: File): Promise<File> {
+export async function prepareUpload(
+  file: File,
+  maxBytes = 4_000_000,
+): Promise<File> {
   if (
     file.size > 10 * 1024 * 1024 ||
     !["image/jpeg", "image/png", "image/webp"].includes(file.type)
@@ -38,7 +41,7 @@ export async function prepareUpload(file: File): Promise<File> {
           throw new Error(
             "사진을 변환하지 못했습니다. 다른 사진을 선택해 주세요.",
           );
-        if (blob.size <= 4_000_000)
+        if (blob.size <= maxBytes)
           return new File(
             [blob],
             type === "image/webp" ? "upload.webp" : "upload.jpg",
@@ -55,4 +58,18 @@ export async function prepareUpload(file: File): Promise<File> {
     bitmap.close();
     if (canvas) canvas.width = canvas.height = 0;
   }
+}
+
+export async function encodeEditedPhoto(canvas: HTMLCanvasElement) {
+  const encode = (type: string) =>
+    new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, 0.9));
+  let blob = await encode("image/webp");
+  if (!blob || blob.type !== "image/webp") blob = await encode("image/jpeg");
+  if (!blob || !["image/webp", "image/jpeg"].includes(blob.type))
+    throw new Error("IMAGE_ENCODE");
+  return prepareUpload(
+    new File([blob], blob.type === "image/webp" ? "photo.webp" : "photo.jpg", {
+      type: blob.type,
+    }),
+  );
 }

@@ -29,21 +29,23 @@ function req(
     mime?: string;
     bytes?: Buffer;
     origin?: string;
+    files?: number;
   } = {},
 ) {
   const form = new FormData();
-  form.set(
-    "file",
-    new File(
-      [
-        new Uint8Array(
-          options.bytes ?? readFileSync("public/icons/icon-192.png"),
-        ),
-      ],
-      "fixture.png",
-      { type: options.mime ?? "image/png" },
-    ),
-  );
+  for (let i = 0; i < (options.files ?? 1); i++)
+    form.append(
+      "file",
+      new File(
+        [
+          new Uint8Array(
+            options.bytes ?? readFileSync("public/icons/icon-192.png"),
+          ),
+        ],
+        "fixture.png",
+        { type: options.mime ?? "image/png" },
+      ),
+    );
   if (options.consent !== false) form.set("consent", "true");
   return new Request("http://localhost:3000/api/analysis/receipt", {
     method: "POST",
@@ -167,4 +169,22 @@ it("does not send any collection when lookup fails or unexpectedly returns anoth
 it("does not load a collection for the standalone label editor", async () => {
   expect((await handleAnalysis(req(), "wine-label")).status).toBe(200);
   expect(from).not.toHaveBeenCalled();
+});
+
+it("accepts multiple images only for wine-photo analysis and uses one quota per batch", async () => {
+  expect((await handleAnalysis(req({ files: 2 }), "receipt")).status).toBe(413);
+  expect((await handleAnalysis(req({ files: 6 }), "wine-photo")).status).toBe(
+    413,
+  );
+  expect(rate).not.toHaveBeenCalled();
+  expect((await handleAnalysis(req({ files: 2 }), "wine-photo")).status).toBe(
+    200,
+  );
+  expect(rate).toHaveBeenCalledTimes(4);
+  expect(analyzeWithGemini).toHaveBeenCalledWith(
+    "wine-photo",
+    [expect.any(Buffer), expect.any(Buffer)],
+    expect.any(AbortSignal),
+    [],
+  );
 });

@@ -23,12 +23,16 @@ beforeEach(() => {
   vi.stubEnv("GEMINI_MODEL", "gemini-3.1-flash-lite");
 });
 it("uses the multi-bottle photo contract without receipt facts and validates the result", async () => {
+  const analysis = structuredClone(winePhotoFixture);
+  analysis.bottles[0].source_photo = 1;
+  analysis.bottles[0].bottle_box = [125, 200, 800, 550];
+  analysis.bottles[1].source_photo = 2;
   const fetcher = vi.fn().mockResolvedValue(
     Response.json({
       candidates: [
         {
           finishReason: "STOP",
-          content: { parts: [{ text: JSON.stringify(winePhotoFixture) }] },
+          content: { parts: [{ text: JSON.stringify(analysis) }] },
         },
       ],
     }),
@@ -36,15 +40,27 @@ it("uses the multi-bottle photo contract without receipt facts and validates the
   vi.stubGlobal("fetch", fetcher);
   const result = await analyzeWithGemini(
     "wine-photo",
-    Buffer.from("fixture"),
+    [Buffer.from("first"), Buffer.from("second")],
     new AbortController().signal,
   );
   expect(result).toMatchObject({
     task: "wine-photo",
-    schema_version: "1.0",
-    analysis: { bottle_count: 2 },
+    schema_version: "2.0",
+    analysis: {
+      bottle_count: 2,
+      bottles: [
+        { source_photo: 1, bottle_box: [125, 200, 800, 550] },
+        { source_photo: 2 },
+      ],
+    },
   });
   const body = JSON.parse(fetcher.mock.calls[0][1].body);
+  expect(body.contents[0].parts.slice(2)).toEqual([
+    { text: "사진 1" },
+    { inlineData: { mimeType: "image/webp", data: "Zmlyc3Q=" } },
+    { text: "사진 2" },
+    { inlineData: { mimeType: "image/webp", data: "c2Vjb25k" } },
+  ]);
   expect(body.generationConfig.maxOutputTokens).toBe(16000);
   const properties = body.generationConfig.responseJsonSchema.properties;
   expect(properties.bottles).toBeDefined();
