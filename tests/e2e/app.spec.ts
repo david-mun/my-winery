@@ -105,20 +105,57 @@ test("fictional collection search, filters and detail work without layout overfl
     fullPage: true,
   });
 });
-test("receipt editor rejects mismatch, keeps bundles unallocated and validates locally", async ({
+test("receipt editor recalculates payment for amount, discount, add and delete changes and keeps bundles unallocated", async ({
   page,
 }) => {
   await page.goto("/demo?view=purchases");
-  await page.getByLabel("영수증 상품명",{exact:true}).fill("세트 예시");
+  await page.getByLabel("영수증 상품명", { exact: true }).fill("세트 예시");
+  const paid = page.getByLabel("실결제액", { exact: true });
+  const discount = page.getByLabel("영수증 할인", { exact: true });
+  await expect(discount).toHaveValue("0");
+  await expect(paid).toHaveValue("0");
+  await expect(paid).toHaveAttribute("readonly", "");
   await page.getByLabel("품목 1 금액").fill("39900");
+  await expect(paid).toHaveValue("39900");
+  await discount.fill("1900");
+  await expect(paid).toHaveValue("38000");
+  await page.getByRole("button", { name: "품목 추가", exact: true }).click();
+  await page.getByLabel("품목 2 금액").fill("10000");
+  await expect(paid).toHaveValue("48000");
+  await page.getByLabel("품목 1 금액").fill("40000");
+  await expect(paid).toHaveValue("48100");
+  await page.getByRole("button", { name: "품목 2 삭제", exact: true }).click();
+  await expect(paid).toHaveValue("38100");
+  await discount.fill("");
+  await expect(paid).toHaveValue("40000");
+  await discount.blur();
+  await expect(discount).toHaveValue("0");
+  await page.getByLabel("품목 1 금액").fill("");
+  await expect(paid).toHaveValue("");
   await expect(page.getByRole("button", { name: "입력 검증" })).toBeDisabled();
+  await page.getByLabel("품목 1 금액").fill("39900");
+  await discount.fill("40000");
+  await expect(page.getByRole("button", { name: "입력 검증" })).toBeDisabled();
+  await expect(
+    page.getByText("할인금액은 품목 합계 이하로 입력해 주세요."),
+  ).toBeVisible();
+  await discount.fill("0");
+  await expect(paid).toHaveValue("39900");
+  await expect(page.getByText("실결제액 차이:", { exact: false })).toHaveCount(
+    0,
+  );
   await page.getByLabel("품목 종류").selectOption("bundle");
   await expect(
     page.getByText("세트 총액만 기록합니다.", { exact: false }),
   ).toBeVisible();
-  await page.getByLabel("저장할 와인명", {exact:true}).nth(0).fill("세트 와인 A");
-  await page.getByLabel("저장할 와인명", {exact:true}).nth(1).fill("세트 와인 B");
-  await page.getByLabel("실결제액", { exact: true }).fill("39900");
+  await page
+    .getByLabel("저장할 와인명", { exact: true })
+    .nth(0)
+    .fill("세트 와인 A");
+  await page
+    .getByLabel("저장할 와인명", { exact: true })
+    .nth(1)
+    .fill("세트 와인 B");
   await page.getByRole("button", { name: "입력 검증" }).click();
   await expect(
     page.getByText("금액 검증 통과 · 데모에서는 저장하지 않습니다."),
@@ -195,7 +232,7 @@ test("authenticated owner can create wine, receipt, note, edit and delete withou
   await page.getByRole("link", { name: "구매 기록 추가", exact: true }).click();
   await page.getByLabel("품목 1 금액").fill("25000");
   await page.getByLabel("영수증 할인", { exact: true }).fill("1000");
-  await page.getByLabel("실결제액", { exact: true }).fill("24000");
+  await expect(page.getByLabel("실결제액", { exact: true })).toHaveValue("24000");
   await page.locator("summary").filter({hasText:"와인 병 사진"}).first().click();
   await page.getByLabel("내 병 사진 선택", {exact:true}).setInputFiles("public/icons/icon-512.png");
   await expect(page.getByText("구매를 저장할 때 병 사진도 첨부합니다.")).toBeVisible();
@@ -211,7 +248,7 @@ test("authenticated owner can create wine, receipt, note, edit and delete withou
   await expect(page.getByAltText("구매한 와인 병 사진")).toHaveCount(0);
   await page.getByText("구매 기록 수정", { exact: true }).click();
   await page.getByLabel("영수증 할인", { exact: true }).fill("2000");
-  await page.getByLabel("실결제액", { exact: true }).fill("23000");
+  await expect(page.getByLabel("실결제액", { exact: true })).toHaveValue("23000");
   await page.getByRole("button", { name: "구매 저장", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "실결제 23,000원", exact: true }),

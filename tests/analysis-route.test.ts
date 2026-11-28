@@ -15,6 +15,14 @@ import { adminClient } from "../lib/supabase/admin";
 import { analyzeWithGemini } from "../lib/analysis/gemini";
 import { handleAnalysis } from "../lib/analysis/handler";
 const rate = vi.fn();
+const range = vi.fn();
+const query = {
+  select: vi.fn().mockReturnThis(),
+  eq: vi.fn().mockReturnThis(),
+  order: vi.fn().mockReturnThis(),
+  range,
+};
+const from = vi.fn(() => query);
 function req(
   options: {
     consent?: boolean;
@@ -48,11 +56,13 @@ beforeEach(() => {
   vi.stubEnv("NEXT_PUBLIC_APP_URL", "http://localhost:3000");
   vi.mocked(requireUser).mockResolvedValue({
     user: { id: "owner-a" },
-  } as Awaited<ReturnType<typeof requireUser>>);
+    db: { from },
+  } as unknown as Awaited<ReturnType<typeof requireUser>>);
   vi.mocked(adminClient).mockReturnValue({ rpc: rate } as unknown as ReturnType<
     typeof adminClient
   >);
   rate.mockResolvedValue({ data: true, error: null });
+  range.mockResolvedValue({ data: [], error: null });
   vi.mocked(analyzeWithGemini).mockResolvedValue({
     task: "receipt",
     analysis: {},
@@ -71,6 +81,7 @@ it.each(
     const res = await handleAnalysis(req(), task);
     expect(res.status).toBe(status);
     expect(rate).not.toHaveBeenCalled();
+    expect(from).not.toHaveBeenCalled();
     expect(analyzeWithGemini).not.toHaveBeenCalled();
     expect(res.headers.get("cache-control")).toContain("no-store");
   },
@@ -109,6 +120,51 @@ it("sanitizes the image and consumes owner/project quotas before analyzing witho
     "receipt",
     expect.any(Buffer),
     expect.any(AbortSignal),
+    [],
   );
   expect(res.headers.get("cache-control")).toContain("no-store");
+});
+
+it("loads only the authenticated owner's wine identity fields, never client-supplied context", async () => {
+  range.mockResolvedValue({
+    data: [
+      {
+        id: "private-wine",
+        owner_id: "owner-a",
+        name_ko: "내 와인",
+        name_original: "My Wine",
+        producer: "Estate",
+        wine_type: "white",
+        country: "NZ",
+        region: "Marlborough",
+        grape: "Sauvignon Blanc",
+        description: "private note must not leave the app",
+      },
+    ],
+    error: null,
+  });
+  expect((await handleAnalysis(req(), "wine-photo")).status).toBe(200);
+  expect(from).toHaveBeenCalledWith("wines");
+  expect(query.eq).toHaveBeenCalledWith("owner_id", "owner-a");
+  const context = vi.mocked(analyzeWithGemini).mock.calls[0][3]!;
+  expect(context).toHaveLength(1);
+  expect(context[0]).toMatchObject({ id: "private-wine", name_ko: "내 와인" });
+  expect(JSON.stringify(context)).not.toContain("private note");
+  expect(context[0]).not.toHaveProperty("owner_id");
+});
+
+it("does not send any collection when lookup fails or unexpectedly returns another owner", async () => {
+  for (const response of [
+    { data: null, error: { message: "DB failure" } },
+    { data: [{ owner_id: "owner-b" }], error: null },
+  ]) {
+    range.mockResolvedValue(response);
+    expect((await handleAnalysis(req(), "receipt")).status).toBe(503);
+  }
+  expect(analyzeWithGemini).not.toHaveBeenCalled();
+});
+
+it("does not load a collection for the standalone label editor", async () => {
+  expect((await handleAnalysis(req(), "wine-label")).status).toBe(200);
+  expect(from).not.toHaveBeenCalled();
 });

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 import { analyzeWithGemini, servingSchema } from "../lib/analysis/gemini";
+import type { CollectionWine } from "../lib/analysis/collection-matching";
 import {
   wineFixture,
   receiptFixture,
@@ -22,18 +23,16 @@ beforeEach(() => {
   vi.stubEnv("GEMINI_MODEL", "gemini-3.1-flash-lite");
 });
 it("uses the multi-bottle photo contract without receipt facts and validates the result", async () => {
-  const fetcher = vi
-    .fn()
-    .mockResolvedValue(
-      Response.json({
-        candidates: [
-          {
-            finishReason: "STOP",
-            content: { parts: [{ text: JSON.stringify(winePhotoFixture) }] },
-          },
-        ],
-      }),
-    );
+  const fetcher = vi.fn().mockResolvedValue(
+    Response.json({
+      candidates: [
+        {
+          finishReason: "STOP",
+          content: { parts: [{ text: JSON.stringify(winePhotoFixture) }] },
+        },
+      ],
+    }),
+  );
   vi.stubGlobal("fetch", fetcher);
   const result = await analyzeWithGemini(
     "wine-photo",
@@ -142,6 +141,81 @@ it("does not require vintage_label in either Gemini request schema", () => {
     "vintage_label",
   );
   expect(label.properties.wine.anyOf[0].properties.summary_ko).toBeDefined();
+});
+
+it("sends the complete collection as data and resolves only request-local references for each receipt wine", async () => {
+  const wines: CollectionWine[] = [
+    {
+      id: "33333333-3333-4333-8333-333333333333",
+      name_ko: "내 소비뇽 블랑",
+      name_original: "My Sauvignon Blanc",
+      producer: "My Estate",
+      wine_type: "white",
+      country: "NZ",
+      region: "Marlborough",
+      grape: "Sauvignon Blanc",
+    },
+  ];
+  const fetcher = vi.fn().mockResolvedValue(
+    Response.json({
+      candidates: [
+        {
+          finishReason: "STOP",
+          content: {
+            parts: [
+              {
+                text: JSON.stringify({
+                  ...receiptFixture,
+                  collection_matches: [
+                    {
+                      line_index: 0,
+                      wine_index: 1,
+                      collection_ref: 1,
+                      confidence: "medium",
+                      reason: "세트 두 번째 와인의 약칭이 일치합니다.",
+                    },
+                    {
+                      line_index: 1,
+                      wine_index: 0,
+                      collection_ref: 100,
+                      confidence: "high",
+                      reason: "잘못된 참조",
+                    },
+                  ],
+                }),
+              },
+            ],
+          },
+        },
+      ],
+    }),
+  );
+  vi.stubGlobal("fetch", fetcher);
+  const result = await analyzeWithGemini(
+    "receipt",
+    Buffer.from("fixture"),
+    new AbortController().signal,
+    wines,
+  );
+  expect(result.analysis).toEqual(receiptFixture);
+  expect(result.collection_matches).toEqual([
+    {
+      line_index: 0,
+      wine_index: 1,
+      wine_id: wines[0].id,
+      confidence: "medium",
+      reason: "세트 두 번째 와인의 약칭이 일치합니다.",
+    },
+  ]);
+  const body = JSON.parse(fetcher.mock.calls[0][1].body);
+  expect(body.tools).toBeUndefined();
+  expect(body.contents[0].parts[1].text).toContain(
+    '"name_original":"My Sauvignon Blanc"',
+  );
+  expect(body.contents[0].parts[1].text).not.toContain(wines[0].id);
+  expect(
+    body.generationConfig.responseJsonSchema.properties.collection_matches,
+  ).toBeDefined();
 });
 it.each([400, 401, 404, 429])(
   "does not repeat HTTP %i or echo upstream credentials",

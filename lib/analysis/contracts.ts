@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { CollectionMatch } from "./collection-matching";
 
 // Shared data contract only. No provider, credentials or server imports here.
 export const analysisTask = z.enum(["receipt", "wine-label", "wine-photo"]);
@@ -148,10 +149,11 @@ export const receiptAnalysisSchema = z
   .strict();
 export type ReceiptAnalysis = z.infer<typeof receiptAnalysisSchema>;
 export type WineAnalysis = z.infer<typeof wineAnalysisSchema>;
-export type AnalysisResult =
+export type AnalysisResult = (
   | { task: "receipt"; analysis: ReceiptAnalysis; warnings: string[] }
   | { task: "wine-label"; analysis: WineAnalysis; warnings: string[] }
-  | { task: "wine-photo"; analysis: WinePhotoAnalysis; warnings: string[] };
+  | { task: "wine-photo"; analysis: WinePhotoAnalysis; warnings: string[] }
+) & { collection_matches?: CollectionMatch[] };
 
 export function wineDescription(wine: WineFacts) {
   return wine.summary_ko ?? "";
