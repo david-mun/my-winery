@@ -16,6 +16,7 @@ import {
   type AnalysisTask,
 } from "@/lib/analysis/contracts";
 import { Button } from "@/components/ui/button";
+import { collectionMatchesSchema } from "@/lib/analysis/collection-matching";
 
 const subscribeReady = () => () => {};
 const clientReady = () => true;
@@ -226,6 +227,9 @@ export function PhotoAnalysis({
       if (revision.current !== version || controller.signal.aborted) return;
       setResult({
         ...parsed,
+        collection_matches: collectionMatchesSchema.parse(
+          body.collection_matches ?? [],
+        ),
         warnings: Array.isArray(body.warnings)
           ? body.warnings.filter((x: unknown) => typeof x === "string")
           : [],
@@ -444,9 +448,11 @@ export function PhotoAnalysis({
             </Button>
           </div>
           <p>
-            선택한 이미지를 Google Gemini로 전송합니다. 무료 서비스에서는
-            입력·응답이 제품 개선에 사용될 수 있으므로 개인정보·민감정보를
-            보내지 마세요.
+            {task === "wine-label"
+              ? "선택한 이미지를"
+              : "선택한 이미지와 내 컬렉션의 전체 와인 이름·생산자·종류·산지·품종 목록을"}{" "}
+            Google Gemini로 전송합니다. 무료 서비스에서는 입력·응답이 제품
+            개선에 사용될 수 있으므로 개인정보·민감정보를 보내지 마세요.
           </p>
           <label className="filter-check">
             <input

@@ -23,6 +23,171 @@ test.beforeEach(async ({ page }, info) => {
   await expect(page).toHaveURL(/\/wines$/);
 });
 
+for (const task of ["receipt", "wine-photo"] as const) {
+  test(`Gemini collection match for ${task} is preselected, editable and reuses the existing wine`, async ({
+    page,
+  }, info) => {
+    const headers = { Origin: "http://127.0.0.1:3100" };
+    const name = `내 연결 와인 ${task} ${info.project.name}`;
+    const created = await page.request.post("/api/wines", {
+      headers,
+      data: {
+        name_ko: name,
+        name_original: "Existing Estate Sauvignon Blanc",
+        producer: "Existing Estate",
+        wine_type: "white",
+        grape: "소비뇽 블랑",
+        country: "뉴질랜드",
+        region: "말보로",
+        description: "보존할 기존 설명",
+      },
+    });
+    expect(created.status()).toBe(200);
+    const { id } = await created.json();
+    const analysis =
+      task === "receipt"
+        ? structuredClone(receiptFixture)
+        : structuredClone(winePhotoFixture);
+    if ("lines" in analysis) {
+      // The entered line amounts, rather than the OCR paid total, drive payment.
+      analysis.paid_amount = 12345;
+      analysis.discount_amount = null;
+      analysis.lines.forEach((line, i) => {
+        line.raw_label = `매칭 원문 ${task} ${info.project.name} ${i}`;
+        line.wines.forEach((wine, j) => {
+          wine.name = `${line.raw_label} ${j}`;
+          wine.details = null;
+        });
+      });
+    } else {
+      analysis.bottles.forEach((bottle, i) => {
+        bottle.observed.wine!.name = `Matching Label ${info.project.name} ${i}`;
+        bottle.product_candidate = null;
+      });
+    }
+    await page.route(`**/api/analysis/${task}`, (r) =>
+      r.fulfill({
+        json: {
+          task,
+          analysis,
+          warnings: [],
+          collection_matches: [
+            {
+              line_index: 0,
+              wine_index: 0,
+              wine_id: id,
+              confidence: "medium",
+              reason: "약칭과 기존 영문명이 같은 상품입니다.",
+            },
+            {
+              line_index: task === "receipt" ? 0 : 1,
+              wine_index: task === "receipt" ? 1 : 0,
+              wine_id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+              confidence: "high",
+              reason: "현재 컬렉션에 없는 ID는 연결하면 안 됩니다.",
+            },
+          ],
+        },
+      }),
+    );
+    await page.goto("/purchases/new");
+    if (task === "wine-photo")
+      await page.getByRole("radio", { name: /^와인 사진/ }).check();
+    const fileInput = page.getByLabel(
+      task === "receipt" ? "영수증 사진 선택" : "와인 사진 선택",
+      {
+        exact: true,
+      },
+    );
+    await expect(fileInput).toBeEnabled();
+    await fileInput.setInputFiles("public/icons/icon-192.png");
+    await expect(page.getByText(/내 컬렉션의 전체 와인 이름/)).toBeVisible();
+    await page
+      .getByRole("checkbox", {
+        name: "전송할 사진을 확인했고 개인정보를 가렸습니다.",
+      })
+      .check();
+    await page
+      .getByRole("button", { name: "Gemini로 분석", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "초안에 적용", exact: true }),
+    ).toBeVisible();
+    page.once("dialog", (d) => d.accept());
+    await page
+      .getByRole("button", { name: "초안에 적용", exact: true })
+      .click();
+    const links = page.getByLabel("내 컬렉션 와인 연결", { exact: true });
+    await expect(links.first()).toHaveValue(id);
+    await expect(links.nth(1)).toHaveValue("");
+    await expect(page.getByText(/AI 연결 후보 · 확인 필요/)).toBeVisible();
+    await expect(
+      page.getByLabel("저장할 와인명", { exact: true }).first(),
+    ).toHaveValue(name);
+    await links
+      .first()
+      .locator("../..")
+      .screenshot({
+        path: `test-results/collection-match-${task}-${info.project.name}.png`,
+      });
+    // Explicit manual choices remain authoritative and remove the AI suggestion.
+    await links.first().selectOption("");
+    await expect(links.first()).toHaveValue("");
+    await expect(page.getByText(/AI 연결 후보 · 확인 필요/)).toHaveCount(0);
+    await links.first().selectOption(id);
+    if (task === "wine-photo") {
+      await page.getByLabel("구매일 *", { exact: true }).fill("2026-10-12");
+      await page
+        .getByLabel("구매처 *", { exact: true })
+        .selectOption("__new__");
+      await page
+        .getByLabel("새 구매처 이름 *", { exact: true })
+        .fill(`연결 확인 구매처 ${info.project.name}`);
+      await page.getByLabel("품목 1 금액", { exact: true }).fill("10000");
+      await page.getByLabel("품목 2 금액", { exact: true }).fill("10000");
+    }
+    await expect(
+      page.getByRole("button", { name: "구매 저장", exact: true }),
+    ).toBeDisabled();
+    await page
+      .getByRole("checkbox", {
+        name: task === "receipt" ? /원본 영수증과/ : /와인 사진과 와인 정보/,
+      })
+      .check();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    const saved = page.waitForRequest(
+      (req) =>
+        new URL(req.url()).pathname === "/api/purchases" &&
+        req.method() === "POST",
+    );
+    await page.getByRole("button", { name: "구매 저장", exact: true }).click();
+    const body: ReceiptInput = (await saved).postDataJSON();
+    expect(body.lines[0].wines[0].wine_id).toBe(id);
+    expect(JSON.stringify(body)).not.toContain("collectionMatch");
+    expect(JSON.stringify(body)).not.toContain(
+      "ffffffff-ffff-4fff-8fff-ffffffffffff",
+    );
+    if (task === "receipt") {
+      expect(body.lines[0].line_kind).toBe("bundle");
+      expect(body.lines[0].line_amount).toBe(39900);
+      expect(body.discount_amount).toBe(0);
+      expect(body.paid_amount).toBe(59900);
+    }
+    await expect(page).toHaveURL(/\/purchases\/[0-9a-f-]+$/);
+    await page.getByRole("link", { name, exact: true }).click();
+    await expect(page).toHaveURL(`/wines/${id}`);
+    await expect(
+      page
+        .locator(".detail-hero .subtitle")
+        .filter({ hasText: "보존할 기존 설명" }),
+    ).toBeVisible();
+  });
+}
+
 for (const count of [1, 3]) {
   test(`wine photo purchase supports ${count} bottles and requires manual purchase facts`, async ({
     page,
@@ -63,15 +228,12 @@ for (const count of [1, 3]) {
     await expect(page.getByLabel("구매처 *", { exact: true })).toHaveValue("");
     await expect(page.getByLabel("실결제액", { exact: true })).toHaveValue("");
     await expect(page.getByLabel("품목 1 금액")).toHaveValue("");
-    // A user can enter purchase facts before analyzing; applying only replaces wine lines.
+    // Dates, merchant and discount survive analysis; payment follows the new lines.
     await page.getByLabel("구매일 *", { exact: true }).fill("2026-10-12");
     await page.getByLabel("구매처 *", { exact: true }).selectOption("__new__");
     await page
       .getByLabel("새 구매처 이름 *", { exact: true })
       .fill(`사진 구매처 ${count} ${info.project.name}`);
-    await page
-      .getByLabel("실결제액", { exact: true })
-      .fill(String(count * 15000));
     await expect(
       page.getByLabel("와인 사진 선택", { exact: true }),
     ).toBeEnabled();
@@ -104,9 +266,7 @@ for (const count of [1, 3]) {
     await expect(page.getByLabel("구매처 *", { exact: true })).toHaveValue(
       "__new__",
     );
-    await expect(page.getByLabel("실결제액", { exact: true })).toHaveValue(
-      String(count * 15000),
-    );
+    await expect(page.getByLabel("실결제액", { exact: true })).toHaveValue("");
     for (let index = 0; index < count; index++) {
       await expect(
         page.getByLabel(`품목 ${index + 1} 금액`, { exact: true }),
@@ -120,6 +280,9 @@ for (const count of [1, 3]) {
         .getByRole("button", { name: "후보 와인명 사용" })
         .click();
     }
+    await expect(page.getByLabel("실결제액", { exact: true })).toHaveValue(
+      String(count * 15000),
+    );
     await expect(
       page.getByRole("button", { name: "구매 저장", exact: true }),
     ).toBeDisabled();

@@ -8,6 +8,7 @@ import { adminClient } from "@/lib/supabase/admin";
 import { analysisTask } from "./contracts";
 import { analyzeWithGemini, geminiConfig } from "./gemini";
 import { AnalysisError } from "./validation";
+import { loadCollectionWines } from "./collection-context";
 
 async function consume(bucket: string, max: number, seconds: number) {
   const { data, error } = await adminClient().rpc("consume_rate_limit", {
@@ -30,7 +31,7 @@ export async function handleAnalysis(req: Request, taskName: string) {
   let response: Response;
   try {
     assertOrigin(req);
-    const { user } = await requireUser();
+    const { user, db } = await requireUser();
     const task = analysisTask.parse(taskName);
     geminiConfig();
     const form = await readImageForm(req);
@@ -66,8 +67,10 @@ export async function handleAnalysis(req: Request, taskName: string) {
     await consume("analysis:minute:project", 10, 60);
     await consume(`analysis:day:user:${user.id}`, 20, 86400);
     await consume("analysis:day:project", 100, 86400);
+    const wines =
+      task === "wine-label" ? [] : await loadCollectionWines(db, user.id);
     response = NextResponse.json(
-      await analyzeWithGemini(task, bytes, req.signal),
+      await analyzeWithGemini(task, bytes, req.signal, wines),
     );
   } catch (error) {
     response =

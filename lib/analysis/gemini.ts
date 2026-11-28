@@ -8,6 +8,12 @@ import {
   type AnalysisTask,
 } from "./contracts";
 import { AnalysisError, validateAnalysis } from "./validation";
+import {
+  collectionPrompt,
+  proposedCollectionMatch,
+  resolveCollectionMatches,
+  type CollectionWine,
+} from "./collection-matching";
 
 export function geminiConfig() {
   const key = Reflect.get(process.env, "GEMINI_API_KEY") as string | undefined;
@@ -28,12 +34,18 @@ export function geminiConfig() {
 }
 // Full server validation stays strict. Serving constraints are intentionally small.
 export function servingSchema(task: AnalysisTask): unknown {
-  const schema = z.toJSONSchema(
+  const base =
     task === "receipt"
       ? receiptAnalysisSchema
       : task === "wine-photo"
         ? winePhotoAnalysisSchema
-        : wineAnalysisSchema,
+        : wineAnalysisSchema;
+  const schema = z.toJSONSchema(
+    task === "wine-label"
+      ? base
+      : base.extend({
+          collection_matches: z.array(proposedCollectionMatch),
+        }),
     { io: "input" },
   );
   function simplify(value: unknown): unknown {
@@ -81,6 +93,7 @@ export async function analyzeWithGemini(
   task: AnalysisTask,
   bytes: Buffer,
   signal: AbortSignal,
+  collectionWines: CollectionWine[] = [],
 ) {
   const { key, model } = geminiConfig();
   const timeout = AbortSignal.any([signal, AbortSignal.timeout(45000)]);
@@ -90,6 +103,9 @@ export async function analyzeWithGemini(
         role: "user",
         parts: [
           { text: analysisPrompt(task) },
+          ...(task === "wine-label"
+            ? []
+            : [{ text: collectionPrompt(collectionWines) }]),
           {
             inlineData: {
               mimeType: "image/webp",
@@ -154,8 +170,18 @@ export async function analyzeWithGemini(
         "분석 응답을 읽지 못했습니다. 다시 분석해 주세요.",
       );
     }
+    const { collection_matches, ...analysis } =
+      value && typeof value === "object" && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : { collection_matches: undefined };
+    const result = validateAnalysis(task, analysis);
     return {
-      ...validateAnalysis(task, value),
+      ...result,
+      collection_matches: resolveCollectionMatches(
+        collection_matches,
+        result,
+        collectionWines,
+      ),
       model,
       schema_version:
         task === "receipt" ? "3.0" : task === "wine-photo" ? "1.0" : "2.0",
