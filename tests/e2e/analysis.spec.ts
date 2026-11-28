@@ -197,6 +197,15 @@ for (const count of [1, 3]) {
     analysis.bottles = Array.from({ length: count }, (_, index) => {
       const bottle = structuredClone(winePhotoFixture.bottles[0]);
       bottle.position_left_to_right = index + 1;
+      if (count === 3) {
+        bottle.source_photo = index === 2 ? 2 : 1;
+        bottle.bottle_box =
+          index === 0
+            ? [0, 0, 1000, 500]
+            : index === 1
+              ? [0, 500, 1000, 1000]
+              : null;
+      }
       bottle.observed.wine!.name = `Photo ${count} ${index} ${info.project.name}`;
       bottle.product_candidate!.name_ko = `사진 구매 ${count} ${index} ${info.project.name}`;
       bottle.product_candidate!.name_en = `Photo Purchase ${count} ${index} ${info.project.name}`;
@@ -237,9 +246,31 @@ for (const count of [1, 3]) {
     await expect(
       page.getByLabel("와인 사진 선택", { exact: true }),
     ).toBeEnabled();
-    await page
-      .getByLabel("와인 사진 선택", { exact: true })
-      .setInputFiles("public/icons/icon-192.png");
+    const picker = page.getByLabel("와인 사진 선택", { exact: true });
+    if (count === 3) {
+      const pair = Buffer.alloc(80 * 40 * 3);
+      for (let pixel = 0; pixel < 80 * 40; pixel++)
+        pair[pixel * 3 + (pixel % 80 < 40 ? 0 : 2)] = 255;
+      const group = await sharp(pair, {
+        raw: { width: 80, height: 40, channels: 3 },
+      })
+        .png()
+        .toBuffer();
+      const single = await sharp({
+        create: { width: 30, height: 60, channels: 3, background: "#00ff00" },
+      })
+        .png()
+        .toBuffer();
+      await picker.setInputFiles([
+        { name: "group.png", mimeType: "image/png", buffer: group },
+        { name: "single.png", mimeType: "image/png", buffer: single },
+      ]);
+      await expect(
+        page.getByRole("group", { name: "미리 볼 사진" }),
+      ).toBeVisible();
+    } else {
+      await picker.setInputFiles("public/icons/icon-192.png");
+    }
     await expect(
       page.getByRole("button", { name: "Gemini로 분석", exact: true }),
     ).toBeDisabled();
@@ -284,6 +315,9 @@ for (const count of [1, 3]) {
       String(count * 15000),
     );
     await expect(
+      page.getByRole("img", { name: "와인 병 사진 미리보기", exact: true }),
+    ).toHaveCount(count);
+    await expect(
       page.getByRole("button", { name: "구매 저장", exact: true }),
     ).toBeDisabled();
     await page.getByRole("checkbox", { name: /와인 사진과 와인 정보/ }).check();
@@ -297,7 +331,6 @@ for (const count of [1, 3]) {
         path: `test-results/wine-photo-purchase-${info.project.name}.png`,
         fullPage: true,
       });
-    // The source photograph is attached to this purchase, rather than each wine card.
     await page.getByRole("button", { name: "구매 저장", exact: true }).click();
     await expect(page).toHaveURL(/\/purchases\/[0-9a-f-]+$/);
     expect(calls).toBe(1);
@@ -321,6 +354,36 @@ for (const count of [1, 3]) {
         exact: true,
       }),
     ).toBeVisible();
+    const purchaseUrl = page.url();
+    for (const [index, bottle] of analysis.bottles.entries()) {
+      if (index > 0) await page.goto(purchaseUrl);
+      await page
+        .getByRole("link", {
+          name: bottle.product_candidate!.name_ko!,
+          exact: true,
+        })
+        .click();
+      const cover = page.locator("img.wine-photo");
+      await expect(cover).toBeVisible();
+      if (count === 3) {
+        const src = await cover.getAttribute("src");
+        const response = await page.request.get(src!);
+        expect(response.ok()).toBe(true);
+        const { data, info } = await sharp(await response.body())
+          .removeAlpha()
+          .raw()
+          .toBuffer({ resolveWithObject: true });
+        expect([info.width, info.height]).toEqual(
+          index === 2 ? [30, 60] : [40, 40],
+        );
+        const center =
+          (Math.floor(info.height / 2) * info.width +
+            Math.floor(info.width / 2)) *
+          info.channels;
+        expect(data[center + [0, 2, 1][index]]).toBeGreaterThan(220);
+      }
+    }
+    await page.goto(purchaseUrl);
     await page
       .getByRole("link", {
         name: analysis.bottles[0].product_candidate!.name_ko!,

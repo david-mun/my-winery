@@ -160,10 +160,18 @@ it("rejects ambiguous, empty or oversized multi-bottle output and model-supplied
   value.bottles[1].position_left_to_right = 1;
   expect(() => validateAnalysis("wine-photo", value)).toThrow();
   value.bottles[1].position_left_to_right = 2;
+  expect(() => validateAnalysis("wine-photo", value, 2)).toThrow();
+  value.bottles[0].source_photo = 2;
+  value.bottles[1].source_photo = 1;
+  expect(() => validateAnalysis("wine-photo", value, 2)).toThrow();
+  value.bottles[0].source_photo = 1;
+  value.bottles[1].source_photo = 2;
+  expect(() => validateAnalysis("wine-photo", value, 2)).not.toThrow();
+  expect(() => validateAnalysis("wine-photo", value)).toThrow();
   Object.assign(value.bottles[0].product_candidate!, {
     wine_id: "another-owner",
   });
-  expect(() => validateAnalysis("wine-photo", value)).toThrow();
+  expect(() => validateAnalysis("wine-photo", value, 2)).toThrow();
 });
 
 it("keeps product suggestions separate from printed names, vintage and bundle accounting", () => {

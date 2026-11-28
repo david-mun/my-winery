@@ -6,8 +6,10 @@ import {
   useSyncExternalStore,
   type PointerEvent,
 } from "react";
-import { prepareUpload } from "@/lib/image-client";
+import { encodeEditedPhoto, prepareUpload } from "@/lib/image-client";
 import {
+  analysisImageBytes,
+  maxWinePhotos,
   wineDisplayName,
   receiptAnalysisSchema,
   wineAnalysisSchema,
@@ -17,48 +19,64 @@ import {
 } from "@/lib/analysis/contracts";
 import { Button } from "@/components/ui/button";
 import { collectionMatchesSchema } from "@/lib/analysis/collection-matching";
+import { bottlePhotos, type AnalyzedBottlePhoto } from "./bottle-photos";
 
 const subscribeReady = () => () => {};
 const clientReady = () => true;
 const serverReady = () => false;
 type Rect = { x: number; y: number; width: number; height: number };
+type SelectedPhoto = { file: File; original: File };
 export function PhotoAnalysis({
   task,
   onApply,
   onFile,
+  onFiles,
   onBusyChange,
   disabled = false,
 }: {
   task: AnalysisTask;
-  onApply: (result: AnalysisResult) => void;
+  onApply: (
+    result: AnalysisResult,
+    photos?: (AnalyzedBottlePhoto | undefined)[],
+  ) => void;
   onFile?: (file: File | null) => void;
+  onFiles?: (files: File[]) => void;
   onBusyChange?: (busy: boolean) => void;
   disabled?: boolean;
 }) {
   const ready = useSyncExternalStore(subscribeReady, clientReady, serverReady);
-  const [file, setFile] = useState<File | null>(null);
+  const [photos, setPhotos] = useState<SelectedPhoto[]>([]);
+  const [activePhoto, setActivePhoto] = useState(0);
+  const file = photos[activePhoto]?.file;
+  const multi = task === "wine-photo";
+  const [preparing, setPreparing] = useState(false);
   const [mode, setMode] = useState<"redact" | "crop">(
     task === "receipt" ? "redact" : "crop",
   );
   const [consent, setConsent] = useState(false),
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
-  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [result, setResult] = useState<{
+    value: AnalysisResult;
+    bottlePictures?: (AnalyzedBottlePhoto | undefined)[];
+  } | null>(null);
   const [editing, setEditing] = useState(false);
   const [area, setArea] = useState({ x: 0, y: 0, width: 100, height: 100 });
   useEffect(() => {
-    onBusyChange?.(busy || editing);
+    onBusyChange?.(busy || editing || preparing);
     return () => onBusyChange?.(false);
-  }, [busy, editing, onBusyChange]);
+  }, [busy, editing, preparing, onBusyChange]);
   const [selection, setSelection] = useState<Rect | null>(null);
-  const canvas = useRef<HTMLCanvasElement>(null),
-    original = useRef<File | null>(null);
+  const canvas = useRef<HTMLCanvasElement>(null);
   const job = useRef<AbortController | null>(null),
     revision = useRef(0),
     start = useRef<{ x: number; y: number } | null>(null);
   const [dimensions, setDimensions] = useState({ width: 1, height: 1 });
+  const [previewFile, setPreviewFile] = useState<File>();
+  const previewReady = previewFile === file;
   useEffect(
     () => () => {
+      revision.current++;
       job.current?.abort();
     },
     [],
@@ -72,6 +90,7 @@ export function PhotoAnalysis({
           canvas.current.height = bitmap.height;
           canvas.current.getContext("2d")?.drawImage(bitmap, 0, 0);
           setDimensions({ width: bitmap.width, height: bitmap.height });
+          setPreviewFile(file);
         }
         bitmap.close();
       });
@@ -79,36 +98,71 @@ export function PhotoAnalysis({
       cancelled = true;
     };
   }, [file]);
-  function replace(next: File | null) {
+  function resetAnalysis() {
     revision.current++;
     job.current?.abort();
     job.current = null;
     setBusy(false);
     setConsent(false);
+    start.current = null;
     setSelection(null);
     setResult(null);
     setMessage("");
-    setFile(next);
-    onFile?.(next);
   }
-  async function choose(source: File) {
-    replace(null);
+  function updatePhotos(next: SelectedPhoto[], index: number) {
+    resetAnalysis();
+    setPhotos(next);
+    setActivePhoto(index);
+    onFile?.(next[0]?.file ?? null);
+    onFiles?.(next.map((photo) => photo.file));
+  }
+  function replaceActive(next: File) {
+    updatePhotos(
+      photos.map((photo, index) =>
+        index === activePhoto ? { ...photo, file: next } : photo,
+      ),
+      activePhoto,
+    );
+  }
+  async function choose(sources: File[]) {
+    if (!sources.length) return;
+    if (multi && photos.length + sources.length > maxWinePhotos) {
+      setMessage(`한 번에 사진을 최대 ${maxWinePhotos}장 선택할 수 있습니다.`);
+      return;
+    }
+    resetAnalysis();
     const version = revision.current;
+    setPreparing(true);
     try {
-      const prepared = await prepareUpload(source);
+      const selected: SelectedPhoto[] = [];
+      for (const source of sources) {
+        const prepared = await prepareUpload(source);
+        selected.push({ file: prepared, original: prepared });
+      }
       if (revision.current !== version) return;
-      original.current = prepared;
-      replace(prepared);
+      updatePhotos(
+        multi ? [...photos, ...selected] : selected,
+        multi ? photos.length : 0,
+      );
     } catch (error) {
       if (revision.current === version)
         setMessage(
           error instanceof Error ? error.message : "사진을 읽지 못했습니다.",
         );
+    } finally {
+      setPreparing(false);
     }
   }
   async function edit(rect: Rect, action: "redact" | "crop") {
     const current = file;
-    if (!current || editing || rect.width < 4 || rect.height < 4) return;
+    if (
+      !current ||
+      !previewReady ||
+      editing ||
+      rect.width < 4 ||
+      rect.height < 4
+    )
+      return;
     const version = ++revision.current;
     job.current?.abort();
     setBusy(false);
@@ -140,21 +194,8 @@ export function PhotoAnalysis({
         context.fillStyle = "white";
         context.fillRect(rect.x, rect.y, rect.width, rect.height);
       }
-      const encode = (type: string) =>
-        new Promise<Blob | null>((resolve) => out.toBlob(resolve, type, 0.9));
-      let blob = await encode("image/webp");
-      if (!blob || blob.type !== "image/webp")
-        blob = await encode("image/jpeg");
-      if (!blob || !["image/webp", "image/jpeg"].includes(blob.type))
-        throw new Error("IMAGE_ENCODE");
-      const edited = await prepareUpload(
-        new File(
-          [blob],
-          blob.type === "image/webp" ? "analysis.webp" : "analysis.jpg",
-          { type: blob.type },
-        ),
-      );
-      if (revision.current === version) replace(edited);
+      const edited = await encodeEditedPhoto(out);
+      if (revision.current === version) replaceActive(edited);
     } catch {
       if (revision.current === version)
         setMessage("사진을 편집하지 못했습니다. 다시 선택해 주세요.");
@@ -182,7 +223,7 @@ export function PhotoAnalysis({
     };
   }
   async function analyze() {
-    if (!file || !consent || editing) return;
+    if (!file || !consent || editing || preparing || busy) return;
     const controller = new AbortController();
     job.current = controller;
     const version = revision.current;
@@ -191,10 +232,20 @@ export function PhotoAnalysis({
     setResult(null);
     const timer = window.setTimeout(() => controller.abort(), 55000);
     try {
-      if (file.size > 3 * 1024 * 1024)
-        throw new Error("사진 크기를 3MB 이하로 줄여 주세요.");
+      const files = photos.map((photo) => photo.file);
+      const compress =
+        files.reduce((sum, file) => sum + file.size, 0) > analysisImageBytes;
+      const budget = Math.floor(analysisImageBytes / files.length);
       const data = new FormData();
-      data.set("file", file);
+      for (const photo of files) {
+        controller.signal.throwIfAborted();
+        data.append(
+          "file",
+          compress && photo.size > budget
+            ? await prepareUpload(photo, budget)
+            : photo,
+        );
+      }
       data.set("consent", "true");
       const res = await fetch(`/api/analysis/${task}`, {
         method: "POST",
@@ -225,14 +276,23 @@ export function PhotoAnalysis({
                 analysis: wineAnalysisSchema.parse(body.analysis),
               } as const);
       if (revision.current !== version || controller.signal.aborted) return;
+      const bottlePictures =
+        parsed.task === "wine-photo"
+          ? await bottlePhotos(parsed.analysis, files, controller.signal)
+          : undefined;
+      controller.signal.throwIfAborted();
+      if (revision.current !== version) return;
       setResult({
-        ...parsed,
-        collection_matches: collectionMatchesSchema.parse(
-          body.collection_matches ?? [],
-        ),
-        warnings: Array.isArray(body.warnings)
-          ? body.warnings.filter((x: unknown) => typeof x === "string")
-          : [],
+        value: {
+          ...parsed,
+          collection_matches: collectionMatchesSchema.parse(
+            body.collection_matches ?? [],
+          ),
+          warnings: Array.isArray(body.warnings)
+            ? body.warnings.filter((x: unknown) => typeof x === "string")
+            : [],
+        },
+        bottlePictures,
       });
       setMessage("분석했습니다. 원본과 비교한 뒤 초안에 적용하세요.");
     } catch (error) {
@@ -258,6 +318,7 @@ export function PhotoAnalysis({
       : task === "wine-photo"
         ? "와인"
         : "와인 라벨";
+  const analysis = result?.value;
   return (
     <section
       className="purchase-line photo-analysis"
@@ -269,7 +330,7 @@ export function PhotoAnalysis({
         {task === "wine-label"
           ? "한 병의 라벨만 보이도록 잘라 주세요."
           : task === "wine-photo"
-            ? "한 병 또는 여러 병의 라벨이 잘 보이는 사진을 선택하세요. 최대 20병까지 분석합니다."
+            ? `사진 최대 ${maxWinePhotos}장, 총 20병까지 분석합니다. 한 장에 여러 병이 있으면 병마다 잘라서 카드 사진으로 제안합니다.`
             : "연락처·카드·전표번호 등 개인정보를 가려 주세요."}
       </p>
       <div className="form-actions">
@@ -279,11 +340,12 @@ export function PhotoAnalysis({
             type="file"
             aria-label={`${label} 사진 선택`}
             accept="image/jpeg,image/png,image/webp"
-            disabled={disabled || !ready || editing}
+            multiple={multi}
+            disabled={disabled || !ready || editing || preparing}
             onChange={(e) => {
-              const picked = e.target.files?.[0];
+              const picked = Array.from(e.target.files ?? []);
               e.target.value = "";
-              if (picked) void choose(picked);
+              void choose(picked);
             }}
           />
         </label>
@@ -294,11 +356,11 @@ export function PhotoAnalysis({
             aria-label={`${label} 카메라 촬영`}
             accept="image/jpeg,image/png,image/webp"
             capture="environment"
-            disabled={disabled || !ready || editing}
+            disabled={disabled || !ready || editing || preparing}
             onChange={(e) => {
               const picked = e.target.files?.[0];
               e.target.value = "";
-              if (picked) void choose(picked);
+              if (picked) void choose([picked]);
             }}
           />
         </label>
@@ -306,22 +368,45 @@ export function PhotoAnalysis({
           <Button
             type="button"
             variant="ghost"
-            disabled={disabled || !ready || editing}
+            disabled={disabled || !ready || editing || preparing}
             onClick={() => {
-              original.current = null;
-              replace(null);
+              const next = photos.filter((_, index) => index !== activePhoto);
+              updatePhotos(
+                next,
+                Math.max(0, Math.min(activePhoto, next.length - 1)),
+              );
             }}
           >
             사진 제거
           </Button>
         )}
       </div>
+      {photos.length > 1 && (
+        <div className="form-actions" role="group" aria-label="미리 볼 사진">
+          {photos.map((_, index) => (
+            <Button
+              key={index}
+              type="button"
+              variant="outline"
+              disabled={disabled || editing || preparing}
+              aria-pressed={activePhoto === index}
+              onClick={() => {
+                start.current = null;
+                setSelection(null);
+                setActivePhoto(index);
+              }}
+            >
+              사진 {index + 1}
+            </Button>
+          ))}
+        </div>
+      )}
       {file && (
         <>
           <div className="form-actions">
             <Button
               type="button"
-              disabled={disabled || !ready || editing}
+              disabled={disabled || !ready || editing || preparing}
               variant="outline"
               aria-pressed={mode === "redact"}
               onClick={() => setMode("redact")}
@@ -330,7 +415,7 @@ export function PhotoAnalysis({
             </Button>
             <Button
               type="button"
-              disabled={disabled || !ready || editing}
+              disabled={disabled || !ready || editing || preparing}
               variant="outline"
               aria-pressed={mode === "crop"}
               onClick={() => setMode("crop")}
@@ -339,9 +424,9 @@ export function PhotoAnalysis({
             </Button>
             <Button
               type="button"
-              disabled={disabled || !ready || editing}
+              disabled={disabled || !ready || editing || preparing}
               variant="ghost"
-              onClick={() => replace(original.current)}
+              onClick={() => replaceActive(photos[activePhoto].original)}
             >
               원본으로 되돌리기
             </Button>
@@ -357,7 +442,7 @@ export function PhotoAnalysis({
               role="img"
               aria-label={`전송할 ${label} 미리보기`}
               onPointerDown={(e) => {
-                if (disabled || editing) return;
+                if (disabled || editing || preparing || !previewReady) return;
                 start.current = point(e);
                 e.currentTarget.setPointerCapture(e.pointerId);
               }}
@@ -411,7 +496,9 @@ export function PhotoAnalysis({
           <div className="form-actions">
             <Button
               type="button"
-              disabled={disabled || !ready || editing}
+              disabled={
+                disabled || !ready || editing || preparing || !previewReady
+              }
               variant="outline"
               onClick={() => {
                 const c = canvas.current;
@@ -431,7 +518,9 @@ export function PhotoAnalysis({
             </Button>
             <Button
               type="button"
-              disabled={disabled || !ready || editing}
+              disabled={
+                disabled || !ready || editing || preparing || !previewReady
+              }
               variant="outline"
               onClick={() => {
                 const c = canvas.current;
@@ -458,7 +547,7 @@ export function PhotoAnalysis({
             <input
               type="checkbox"
               checked={consent}
-              disabled={editing}
+              disabled={editing || preparing || disabled}
               onChange={(e) => setConsent(e.target.checked)}
             />
             전송할 사진을 확인했고 개인정보를 가렸습니다.
@@ -466,7 +555,7 @@ export function PhotoAnalysis({
           <div className="form-actions">
             <Button
               type="button"
-              disabled={disabled || busy || editing || !consent}
+              disabled={disabled || busy || editing || preparing || !consent}
               onClick={() => void analyze()}
             >
               {busy ? "분석 중…" : "Gemini로 분석"}
@@ -507,7 +596,7 @@ export function PhotoAnalysis({
                   min={0}
                   max={100}
                   value={area[key]}
-                  disabled={editing || disabled}
+                  disabled={editing || disabled || preparing}
                   onChange={(e) =>
                     setArea({ ...area, [key]: Number(e.target.value) })
                   }
@@ -518,7 +607,7 @@ export function PhotoAnalysis({
           <Button
             type="button"
             variant="outline"
-            disabled={editing || disabled}
+            disabled={editing || disabled || preparing || !previewReady}
             onClick={() => {
               if (
                 area.x + area.width > 100 ||
@@ -544,23 +633,30 @@ export function PhotoAnalysis({
           </Button>
         </details>
       )}
-      <p role="status">{editing ? "사진을 편집하는 중…" : message}</p>
-      {result && (
+      <p role="status">
+        {editing
+          ? "사진을 편집하는 중…"
+          : preparing
+            ? "사진을 준비하는 중…"
+            : message}
+      </p>
+      {result && analysis && (
         <div className="auth-notice">
           <strong>
-            {result.task === "receipt"
-              ? `구매 초안 · 상품 ${result.analysis.lines.length}줄`
-              : result.task === "wine-photo"
-                ? `구매 초안 · 와인 ${result.analysis.bottle_count}병`
-                : result.analysis.wine
-                  ? wineDisplayName(result.analysis.wine)
+            {analysis.task === "receipt"
+              ? `구매 초안 · 상품 ${analysis.analysis.lines.length}줄`
+              : analysis.task === "wine-photo"
+                ? `구매 초안 · 와인 ${analysis.analysis.bottle_count}병`
+                : analysis.analysis.wine
+                  ? wineDisplayName(analysis.analysis.wine)
                   : ""}
           </strong>
-          {result.task === "wine-photo" && (
+          {analysis.task === "wine-photo" && (
             <>
               <ol>
-                {result.analysis.bottles.map((b) => (
+                {analysis.analysis.bottles.map((b) => (
                   <li key={b.position_left_to_right}>
+                    {photos.length > 1 && `사진 ${b.source_photo ?? 1} · `}
                     {b.observed.wine
                       ? wineDisplayName(b.observed.wine)
                       : "미확인"}
@@ -569,27 +665,30 @@ export function PhotoAnalysis({
                   </li>
                 ))}
               </ol>
+              {result.bottlePictures?.some((photo) => !photo) && (
+                <p>병 사진을 분리하지 못한 품목은 직접 첨부할 수 있습니다.</p>
+              )}
               <p>
                 구매일·구매처·가격은 직접 입력해 주세요. 사진 속 병 수와 실제
                 구매 수량도 확인하세요.
               </p>
             </>
           )}
-          {result.task === "wine-label" && (
+          {analysis.task === "wine-label" && (
             <p>
-              도수: {result.analysis.wine?.alcohol_percent ?? "미확인"} · 용량:{" "}
-              {result.analysis.wine?.bottle_volume_ml ?? "미확인"}
+              도수: {analysis.analysis.wine?.alcohol_percent ?? "미확인"} ·
+              용량: {analysis.analysis.wine?.bottle_volume_ml ?? "미확인"}
             </p>
           )}
-          {result.warnings.map((warning, i) => (
+          {analysis.warnings.map((warning, i) => (
             <p key={i}>{warning}</p>
           ))}
           <Button
             type="button"
             variant="outline"
-            disabled={disabled || busy}
+            disabled={disabled || busy || editing || preparing}
             onClick={() => {
-              onApply(result);
+              onApply(analysis, result.bottlePictures);
               setResult(null);
             }}
           >

@@ -16,6 +16,7 @@ import {
   type ReceiptWineDetails,
 } from "@/lib/analysis/contracts";
 import { WinePhotoInput, type BottlePhoto } from "./wine-photo-input";
+import type { AnalyzedBottlePhoto } from "./analysis/bottle-photos";
 import { DeletePhoto } from "./delete-photo";
 import { CatalogPicker } from "./catalog-picker";
 import { prepareUpload } from "@/lib/image-client";
@@ -684,7 +685,7 @@ export function ReceiptForm({
   const [date, setDate] = useState(initial?.purchased_on ?? today());
   const [merchant, setMerchant] = useState(initial?.merchant_id ?? "");
   const [merchantName, setMerchantName] = useState("");
-  const [photo, setPhoto] = useState<File | null>(null);
+  const [photos, setPhotos] = useState<File[]>([]);
   const [inputSource, setInputSource] = useState<"receipt" | "wine-photo">(
     "receipt",
   );
@@ -698,7 +699,7 @@ export function ReceiptForm({
   function switchSource(next: typeof inputSource) {
     if (next === inputSource) return;
     if (
-      (photo ||
+      (photos.length ||
         hasDraft ||
         lines.some((l) => l.raw_label) ||
         merchant ||
@@ -709,7 +710,7 @@ export function ReceiptForm({
     )
       return;
     setInputSource(next);
-    setPhoto(null);
+    setPhotos([]);
     setDraft(null);
     setWineDraft(false);
     setReviewed(false);
@@ -722,7 +723,10 @@ export function ReceiptForm({
     setMerchantName("");
     s.setMessage("");
   }
-  function applyAnalysis(result: AnalysisResult) {
+  function applyAnalysis(
+    result: AnalysisResult,
+    bottlePhotos?: (AnalyzedBottlePhoto | undefined)[],
+  ) {
     function collectionLink(
       lineIndex: number,
       wineIndex: number,
@@ -756,13 +760,14 @@ export function ReceiptForm({
         result.analysis.bottles.map((bottle, index) => {
           const wine = bottle.observed.wine!;
           const name = wineDisplayName(wine);
+          const link = collectionLink(index, 0, name);
           return {
             line_kind: "wine",
             raw_label: name,
             line_amount: "",
             wines: [
               {
-                ...collectionLink(index, 0, name),
+                ...link,
                 name_original: name,
                 producer: wine.producer,
                 wine_type: wine.wine_type ?? "other",
@@ -773,6 +778,11 @@ export function ReceiptForm({
                 vintage_label: "UNKNOWN",
                 bottle_quantity: 1,
                 analysisDetails: bottle.product_candidate,
+                bottlePhoto:
+                  link.wine_id &&
+                  data.assets.some((asset) => asset.wine_id === link.wine_id)
+                    ? undefined
+                    : bottlePhotos?.[index],
               },
             ],
           };
@@ -824,7 +834,7 @@ export function ReceiptForm({
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        if (!paymentValid || (hasDraft && !reviewed)) return;
+        if (analysisBusy || !paymentValid || (hasDraft && !reviewed)) return;
         const f = new FormData(e.currentTarget);
         s.save(async () => {
           const payload = receiptInput.parse({
@@ -861,7 +871,7 @@ export function ReceiptForm({
             payload,
           );
           let photoFailed = false;
-          if (photo && attachPhoto) {
+          for (const photo of attachPhoto ? photos : []) {
             const upload = new FormData();
             upload.set("kind", "receipt");
             upload.set("target", result.id);
@@ -873,6 +883,20 @@ export function ReceiptForm({
             }
           }
           let bottleFailed = false;
+          const coveredWines = new Set(
+            data.assets.map((asset) => asset.wine_id),
+          );
+          for (const [i, line] of lines.entries())
+            for (const [j, bottle] of line.wines.entries()) {
+              const picked = bottle.bottlePhoto;
+              const target = result.targets?.[i]?.[j];
+              if (
+                target &&
+                picked &&
+                !("file" in picked && picked.analysisSource)
+              )
+                coveredWines.add(target);
+            }
           for (const [i, line] of lines.entries())
             for (const [j, bottle] of line.wines.entries()) {
               const picked = bottle.bottlePhoto;
@@ -880,6 +904,8 @@ export function ReceiptForm({
               try {
                 const target = result.targets?.[i]?.[j];
                 if (!target) throw Error();
+                const automatic = "file" in picked && picked.analysisSource;
+                if (automatic && coveredWines.has(target)) continue;
                 const upload = new FormData();
                 upload.set("kind", "wine");
                 upload.set("target", target);
@@ -887,6 +913,7 @@ export function ReceiptForm({
                   upload.set("commons_id", String(picked.hit.id));
                 else upload.set("file", picked.file);
                 await request("/api/media", "POST", upload);
+                if (automatic) coveredWines.add(target);
               } catch {
                 bottleFailed = true;
               }
@@ -951,22 +978,39 @@ export function ReceiptForm({
               key={inputSource}
               task={inputSource}
               disabled={s.busy}
-              onFile={(file) => {
-                setPhoto(file);
+              onFiles={(files) => {
+                setPhotos(files);
                 setReviewed(false);
+                if (inputSource === "wine-photo")
+                  setLines((current) =>
+                    current.map((line) => ({
+                      ...line,
+                      wines: line.wines.map((wine) => {
+                        const picked = wine.bottlePhoto;
+                        return picked &&
+                          "file" in picked &&
+                          picked.analysisSource &&
+                          !files.includes(picked.analysisSource)
+                          ? { ...wine, bottlePhoto: undefined }
+                          : wine;
+                      }),
+                    })),
+                  );
               }}
               onBusyChange={setAnalysisBusy}
               onApply={applyAnalysis}
             />
           )}
-          {photo && !demo && (
+          {!!photos.length && !demo && (
             <label className="filter-check">
               <input
                 type="checkbox"
                 checked={attachPhoto}
                 onChange={(e) => setAttachPhoto(e.target.checked)}
               />
-              구매 저장 시 이 사진도 비공개로 첨부
+              {photos.length === 1
+                ? "구매 저장 시 이 사진도 비공개로 첨부"
+                : "구매 저장 시 선택한 사진도 비공개로 첨부"}
             </label>
           )}
         </>
@@ -1081,7 +1125,10 @@ export function ReceiptForm({
                         ? l.wines.slice(0, 1)
                         : l.wines.length >= 2
                           ? l.wines
-                          : [...l.wines, { ...l.wines[0] }],
+                          : [
+                              ...l.wines,
+                              { ...l.wines[0], bottlePhoto: undefined },
+                            ],
                   });
                 }}
               >
@@ -1192,7 +1239,18 @@ export function ReceiptForm({
                                       null,
                                   }
                                 : {}),
-                              bottlePhoto: undefined,
+                              bottlePhoto:
+                                bottle.bottlePhoto &&
+                                "file" in bottle.bottlePhoto &&
+                                bottle.bottlePhoto.analysisSource &&
+                                !(
+                                  matches.length === 1 &&
+                                  data.assets.some(
+                                    (asset) => asset.wine_id === matches[0].id,
+                                  )
+                                )
+                                  ? bottle.bottlePhoto
+                                  : undefined,
                               catalogOriginal: undefined,
                             }
                           : bottle,

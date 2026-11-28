@@ -5,7 +5,7 @@ import { assertOrigin, fail } from "@/lib/http";
 import { readImageForm } from "@/lib/request-body";
 import { sanitizeImage } from "@/lib/image";
 import { adminClient } from "@/lib/supabase/admin";
-import { analysisTask } from "./contracts";
+import { analysisImageBytes, analysisTask, maxWinePhotos } from "./contracts";
 import { analyzeWithGemini, geminiConfig } from "./gemini";
 import { AnalysisError } from "./validation";
 import { loadCollectionWines } from "./collection-context";
@@ -40,27 +40,34 @@ export async function handleAnalysis(req: Request, taskName: string) {
         400,
         "전송할 사진과 개인정보 가리기를 확인해 주세요.",
       );
-    const file = form.get("file");
+    const files = form.getAll("file");
+    const winePhotos = task === "wine-photo";
     if (
-      !(file instanceof File) ||
-      file.size === 0 ||
-      file.size > 3 * 1024 * 1024 ||
-      form.getAll("file").length !== 1
+      !files.length ||
+      files.length > (winePhotos ? maxWinePhotos : 1) ||
+      !files.every((file) => file instanceof File) ||
+      files.some((file) => file.size === 0) ||
+      files.reduce((sum, file) => sum + file.size, 0) > analysisImageBytes
     )
-      throw new AnalysisError(413, "3MB 이하 사진 한 장을 선택해 주세요.");
-    let bytes: Buffer;
-    try {
-      bytes = await sanitizeImage(
-        Buffer.from(await file.arrayBuffer()),
-        file.type,
+      throw new AnalysisError(
+        413,
+        winePhotos
+          ? `사진은 최대 ${maxWinePhotos}장, 합계 3MB까지 전송할 수 있습니다.`
+          : "3MB 이하 사진 한 장을 선택해 주세요.",
       );
+    const images: Buffer[] = [];
+    try {
+      for (const file of files)
+        images.push(
+          await sanitizeImage(Buffer.from(await file.arrayBuffer()), file.type),
+        );
     } catch {
       throw new AnalysisError(
         415,
         "사진 형식을 확인해 주세요. JPEG·PNG·WebP만 지원합니다.",
       );
     }
-    if (bytes.length > 3 * 1024 * 1024)
+    if (images.some((image) => image.length > analysisImageBytes))
       throw new AnalysisError(413, "사진 크기를 더 줄여 주세요.");
     // Existing DB RPC uses atomic, shared counters, including across serverless instances.
     await consume(`analysis:minute:user:${user.id}`, 3, 60);
@@ -70,7 +77,12 @@ export async function handleAnalysis(req: Request, taskName: string) {
     const wines =
       task === "wine-label" ? [] : await loadCollectionWines(db, user.id);
     response = NextResponse.json(
-      await analyzeWithGemini(task, bytes, req.signal, wines),
+      await analyzeWithGemini(
+        task,
+        images.length === 1 ? images[0] : images,
+        req.signal,
+        wines,
+      ),
     );
   } catch (error) {
     response =

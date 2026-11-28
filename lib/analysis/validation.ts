@@ -18,6 +18,7 @@ export class AnalysisError extends Error {
 export function validateAnalysis(
   task: AnalysisTask,
   value: unknown,
+  photoCount = 1,
 ): AnalysisResult {
   if (task === "wine-photo") {
     const parsed = winePhotoAnalysisSchema.safeParse(value);
@@ -30,13 +31,27 @@ export function validateAnalysis(
     if (
       !data.bottle_count ||
       data.bottle_count !== data.bottles.length ||
-      data.bottles.some((b, i) => b.position_left_to_right !== i + 1)
+      data.bottles.some(
+        (b, i) =>
+          b.position_left_to_right !== i + 1 ||
+          (photoCount > 1 && b.source_photo === undefined) ||
+          (b.source_photo ?? 1) > photoCount ||
+          (b.source_photo ?? 1) < (data.bottles[i - 1]?.source_photo ?? 1),
+      )
     )
       throw new AnalysisError(
         422,
         "와인 병을 구분하지 못했습니다. 라벨이 보이도록 다시 찍어 주세요.",
       );
     const warnings = [...data.warnings];
+    if (
+      photoCount > 1 &&
+      new Set(data.bottles.map((bottle) => bottle.source_photo)).size <
+        photoCount
+    )
+      warnings.push(
+        "일부 사진에서 와인을 찾지 못했습니다. 사진을 확인해 주세요.",
+      );
     for (const bottle of data.bottles) {
       const result = validateAnalysis("wine-label", bottle.observed);
       if (result.task !== "wine-label")

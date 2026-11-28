@@ -78,7 +78,7 @@ export function analysisPrompt(task: AnalysisTask) {
   if (task === "wine-photo")
     return (
       common +
-      `와인 병 사진이다. 한 병 또는 여러 병을 모두 처리하라. 라벨을 식별할 수 있는 병을 왼쪽부터 bottles에 각각 반환하고 position_left_to_right는 1부터 순서대로 붙여라. bottle_count는 bottles 길이와 같아야 한다. 최대 20병이며 라벨이 없는 주변 병은 세지 마라. 각 observed는 해당 한 병만의 관측값이다. observed.bottle_count=1, observed.wine은 사진의 인쇄된 글자만 추출하고 모든 채워진 필드에 evidence={field,text}를 넣어라. 이름은 원문 철자를 유지하고 생산자/국가/종류/도수/용량을 지식으로 보충하지 마라. 인쇄된 품종은 wine.grapes와 field=grapes 근거에 넣고 품종만으로 wine_type을 추론하지 마라. 빈티지는 이 작업에서 추출하지 말고 생략하거나 null로 두며 설명/이름에도 연도를 추가하지 마라. observed.summary_ko는 보이는 와인 자체 정보의 한국어 요약이며 빈티지 설명은 제외한다. 옆 병의 글자를 섞지 마라.
+      `번호가 붙은 와인 사진마다 라벨을 식별할 수 있는 병을 bottles에 반환하라. source_photo는 해당 입력 사진 번호(1부터 시작)다. 사진 번호순, 같은 사진에서는 왼쪽부터 정렬한 다음 position_left_to_right를 전체 목록에서 1부터 매겨라. 다른 사진의 관측값을 섞거나 병을 합치지 마라. 식별할 병이 없는 사진은 건너뛰고 bottle_count는 전체 bottles 길이와 맞춰라. 최대 20병이며 라벨이 없는 주변 병은 세지 마라. 각 병만 포함하는 영역을 bottle_box=[위, 왼쪽, 아래, 오른쪽]에 해당 사진 크기 기준 0–1000 정수 좌표로 줘라. 병 전체가 보이지 않으면 보이는 병과 라벨을 둘러싸라. 영역을 확실히 분리할 수 없으면 bottle_box=null로 두어라. 각 observed는 해당 한 병만의 관측값이다. observed.bottle_count=1, observed.wine은 사진의 인쇄된 글자만 추출하고 모든 채워진 필드에 evidence={field,text}를 넣어라. 이름은 원문 철자를 유지하고 생산자/국가/종류/도수/용량을 지식으로 보충하지 마라. 인쇄된 품종은 wine.grapes와 field=grapes 근거에 넣고 품종만으로 wine_type을 추론하지 마라. 빈티지는 이 작업에서 추출하지 말고 생략하거나 null로 두며 설명/이름에도 연도를 추가하지 마라. observed.summary_ko는 보이는 와인 자체 정보의 한국어 요약이며 빈티지 설명은 제외한다. 옆 병의 글자를 섞지 마라.
 product_candidate에 한해서만 라벨 상품명과 일반 상품 지식을 이용해 한글명/영문명/생산자/국가/지역/품종/도수 범위/와인 자체 설명을 제안할 수 있다. 식별 불가면 null, 일부 모르는 값은 null/빈 배열. confidence는 high/medium/low이며 모호한 식별은 notes에 한국어로 설명하라. 도수는 {min,max}, 단일값은 min=max. 이름/설명에 빈티지나 개인 시음 경험을 추가하지 마라. 웹 검색/공식 확인을 주장하지 마라. 관측값을 후보 지식으로 채우지 마라. 구매가격/할인/결제액/구매날짜/구매장소/구매수량은 추정하거나 반환하지 마라. 병당 구매수량은 사용자가 확인한다.`
     );
   return (
@@ -91,12 +91,13 @@ product_candidate에 한해서만 라벨 상품명과 일반 상품 지식을 �
 }
 export async function analyzeWithGemini(
   task: AnalysisTask,
-  bytes: Buffer,
+  bytes: Buffer | Buffer[],
   signal: AbortSignal,
   collectionWines: CollectionWine[] = [],
 ) {
   const { key, model } = geminiConfig();
   const timeout = AbortSignal.any([signal, AbortSignal.timeout(45000)]);
+  const images = Array.isArray(bytes) ? bytes : [bytes];
   const body = JSON.stringify({
     contents: [
       {
@@ -106,12 +107,15 @@ export async function analyzeWithGemini(
           ...(task === "wine-label"
             ? []
             : [{ text: collectionPrompt(collectionWines) }]),
-          {
-            inlineData: {
-              mimeType: "image/webp",
-              data: bytes.toString("base64"),
+          ...images.flatMap((image, index) => [
+            ...(task === "wine-photo" ? [{ text: `사진 ${index + 1}` }] : []),
+            {
+              inlineData: {
+                mimeType: "image/webp",
+                data: image.toString("base64"),
+              },
             },
-          },
+          ]),
         ],
       },
     ],
@@ -174,7 +178,7 @@ export async function analyzeWithGemini(
       value && typeof value === "object" && !Array.isArray(value)
         ? (value as Record<string, unknown>)
         : { collection_matches: undefined };
-    const result = validateAnalysis(task, analysis);
+    const result = validateAnalysis(task, analysis, images.length);
     return {
       ...result,
       collection_matches: resolveCollectionMatches(
@@ -183,8 +187,7 @@ export async function analyzeWithGemini(
         collectionWines,
       ),
       model,
-      schema_version:
-        task === "receipt" ? "3.0" : task === "wine-photo" ? "1.0" : "2.0",
+      schema_version: task === "receipt" ? "3.0" : "2.0",
     };
   } catch (error) {
     if (error instanceof AnalysisError) throw error;

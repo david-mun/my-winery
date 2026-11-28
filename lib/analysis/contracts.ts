@@ -90,6 +90,12 @@ export const wineAnalysisSchema = z
     warnings: z.array(z.string().max(500)).max(20),
   })
   .strict();
+export const maxWinePhotos = 5;
+export const analysisImageBytes = 3 * 1024 * 1024;
+// Coordinates are [top, left, bottom, right], normalized to 0–1000.
+export const bottleBoxSchema = z
+  .array(z.number().int().min(0).max(1000))
+  .length(4);
 // A photograph can contain one or many bottles. No purchase facts are accepted.
 export const winePhotoAnalysisSchema = z
   .object({
@@ -99,6 +105,8 @@ export const winePhotoAnalysisSchema = z
         z
           .object({
             position_left_to_right: z.number().int().min(1).max(20),
+            source_photo: z.number().int().min(1).max(maxWinePhotos).optional(),
+            bottle_box: bottleBoxSchema.nullish(),
             observed: wineAnalysisSchema,
             product_candidate: receiptWineDetails.nullable(),
           })
